@@ -1,0 +1,6 @@
+{
+  "name": "BrewLite - Ứng Dụng Đặt Cà Phê Không Dùng Tiền Mặt",
+  "description": "Ứng dụng gọi món và đặt cà phê Brew Lite với thực đơn đa dạng cà phê pha phin, cà phê máy, bánh ngọt nướng tươi và kem gelato hảo hạng.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
