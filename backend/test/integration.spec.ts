@@ -1,47 +1,74 @@
 /**
- * Bài test Task 10 chạy trên PostgreSQL test RIÊNG.
- * Cần khai báo TEST_DATABASE_URL và chạy prisma db push với DATABASE_URL=testdb trước khi test.
- * Nếu chưa có DB riêng, Jest bỏ qua các ca integration, không tuyên bố là đã đạt.
+ * Chạy với TEST_DATABASE_URL trỏ database TEST RIÊNG có schema BrewLite.
+ * Không chạy trên DB thật.
  */
 import { PrismaClient } from '@prisma/client';
-import { OrdersService } from '../src/orders/orders.service';
-import { PaymentsService } from '../src/payments/payments.service';
 import { PrismaService } from '../src/prisma.service';
+import { OrdersService } from '../src/orders/orders.service';
+import { PricingService } from '../src/orders/pricing.service';
+import { PaymentsService } from '../src/payments/payments.service';
 
-const enabled = Boolean(process.env.TEST_DATABASE_URL);
-const describeDb = enabled ? describe : describe.skip;
-describeDb('Task 10 integration (PostgreSQL riêng)', () => {
-  let db: PrismaClient;
-  let orders: OrdersService;
-  let payments: PaymentsService;
-  let userId: string;
-  beforeAll(async () => {
-    db = new PrismaClient({ datasources: { db: { url: process.env.TEST_DATABASE_URL! } } });
-    await db.$connect();
-    const u = await db.user.create({ data: { email: `test-${Date.now()}@example.com`, fullName: 'Test', passwordHash: 'no-login' } });
-    userId = u.id;
-    orders = new OrdersService(db as unknown as PrismaService);
-    payments = new PaymentsService(db as unknown as PrismaService);
-  });
-  afterAll(async () => { if (db) await db.$disconnect(); });
-  test('cùng Idempotency-Key chỉ tạo 1 payment và cộng điểm 1 lần', async () => {
-    const id = `test-product-${Date.now()}-pay`;
-    await db.product.create({ data: { id, name: 'Test', category: 'coffee_viet', price: 30000, imageUrl: '/x.jpg', stock: 10 } });
-    const o = await orders.create(userId, { items: [{ productId: id, size: 'S', toppings: [], qty: 2 }] });
-    const key = `payment-${Date.now()}-repeat`;
-    const a = await payments.pay(userId, key, { orderId: o.id, method: 'WALLET' });
-    const b = await payments.pay(userId, key, { orderId: o.id, method: 'WALLET' });
-    expect(a.replay).toBe(false);
-    expect(b.replay).toBe(true);
-    expect(await db.payment.count({ where: { orderId: o.id } })).toBe(1);
-    expect((await db.user.findUniqueOrThrow({ where: { id: userId } })).loyaltyPoints).toBe(6);
-  });
-  test('2 đơn cùng đặt 1 sản phẩm tồn kho 1, chỉ 1 đơn thành công', async () => {
-    const id = `test-product-${Date.now()}-stock`;
-    await db.product.create({ data: { id, name: 'Test stock', category: 'coffee_viet', price: 25000, imageUrl: '/x.jpg', stock: 1 } });
-    const payload = { items: [{ productId: id, size: 'M' as const, toppings: [], qty: 1 }] };
-    const result = await Promise.allSettled([orders.create(userId, payload), orders.create(userId, payload)]);
-    expect(result.filter(x => x.status === 'fulfilled')).toHaveLength(1);
-    expect((await db.product.findUniqueOrThrow({ where: { id } })).stock).toBe(0);
-  });
+const describeDb = process.env.TEST_DATABASE_URL ? describe : describe.skip;
+
+describeDb('Task 10 - PostgreSQL thật', () => {
+    let db: PrismaClient;
+    let orders: OrdersService;
+    let payments: PaymentsService;
+    let userId: string;
+
+    beforeAll(async () => {
+        db = new PrismaClient({
+            datasources: { db: { url: process.env.TEST_DATABASE_URL! } },
+        });
+        await db.$connect();
+        await db.sizePrice.upsert({
+            where: { size: 'S' }, update: { extraPrice: 0 },
+            create: { size: 'S', extraPrice: 0 },
+        });
+        await db.sizePrice.upsert({
+            where: { size: 'M' }, update: { extraPrice: 6000 },
+            create: { size: 'M', extraPrice: 6000 },
+        });
+        const user = await db.user.create({
+            data: { email: `test-${Date.now()}@example.com`, fullName: 'Test', passwordHash: 'test' },
+        });
+        userId = user.id;
+        orders = new OrdersService(db as unknown as PrismaService, new PricingService());
+        payments = new PaymentsService(db as unknown as PrismaService);
+    });
+    afterAll(async () => { if (db) await db.$disconnect(); });
+
+    test('gửi hai lần cùng khóa: 1 payment, điểm cộng 1 lần', async () => {
+        const code = `pay-${Date.now()}`;
+        await db.product.create({
+            data: { code, name: 'Món test', price: 30000, stock: 10 },
+        });
+        const order = await orders.create(userId, {
+            items: [{ productCode: code, size: 'S', toppingCodes: [], qty: 2 }],
+        });
+        const key = `payment-${Date.now()}-repeat`;
+        const first = await payments.pay(userId, key, { orderId: order.id, method: 'WALLET' });
+        const second = await payments.pay(userId, key, { orderId: order.id, method: 'WALLET' });
+        expect(first.replay).toBe(false);
+        expect(second.replay).toBe(true);
+        expect(await db.payment.count({ where: { orderId: order.id } })).toBe(1);
+        expect(await db.loyaltyTransaction.count({
+            where: { orderId: order.id, type: 'EARN' },
+        })).toBe(1);
+    });
+
+    test('hai đơn đặt 1 sản phẩm còn stock=1: chỉ 1 thành công', async () => {
+        const code = `stock-${Date.now()}`;
+        await db.product.create({
+            data: { code, name: 'Món chỉ còn 1', price: 25000, stock: 1 },
+        });
+        const payload = {
+            items: [{ productCode: code, size: 'M' as const, toppingCodes: [], qty: 1 }],
+        };
+        const result = await Promise.allSettled([
+            orders.create(userId, payload), orders.create(userId, payload),
+        ]);
+        expect(result.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+        expect((await db.product.findUniqueOrThrow({ where: { code } })).stock).toBe(0);
+    });
 });
