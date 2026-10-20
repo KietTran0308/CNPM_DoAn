@@ -1,117 +1,121 @@
-# BrewLite — Ứng Dụng Gọi Món Cà Phê Full-Stack Production
+# BrewLite
 
-Ứng dụng web đặt cà phê, bánh ngọt và kem thủ công hoạt động theo mô hình **gọi món trực tuyến – thanh toán – nhận tại quầy Barista** kết hợp hệ thống hội viên thân thiết (BrewLite Rewards), chạy trên kiến trúc Full-Stack Production hoàn chỉnh kết nối Cơ sở dữ liệu SQL.
+## 1. Cách chạy dễ nhất - Docker Desktop
 
----
+Cài Docker Desktop (chế độ Linux containers), sau đó mở Terminal tại **thư mục chứa docker-compose.yml**:
 
-## 1. Kiến Trúc Full-Stack (Full-Stack Architecture)
+```powershell
+Copy-Item .env.example .env
+# mở .env, thay JWT_SECRET và mật khẩu PostgreSQL nếu cần
+# Chạy cả 3 dịch vụ (PostgreSQL, NestJS, Next.js):
+docker compose up --build
+```
+
+- Website: http://localhost:3000
+- Backend health: http://localhost:4000/health
+- Danh sách sản phẩm: http://localhost:4000/products
+- PostgreSQL: `localhost:5433` (trong Docker là `db:5432`)
+
+Lần đầu Docker cần Internet để tải image và package npm. `backend` tự tạo bảng bằng Prisma db push và seed 32 sản phẩm + voucher. Để dừng: `Ctrl+C`, hoặc ở Terminal khác `docker compose down`. **Không chạy `docker compose down -v` nếu không muốn mất dữ liệu database.**
+
+## 2. Chạy trên IntelliJ/Terminal không cần build Docker frontend/backend
+
+Chỉ chạy PostgreSQL qua Docker, còn mã nguồn chạy Node.js (>= 20.9) trên máy:
+
+```powershell
+# Terminal ở thư mục gốc
+Copy-Item .env.example .env
+docker compose up -d db
+
+# Terminal backend
+cd backend
+Copy-Item .env.example .env
+npm install
+npx prisma generate
+npm run db:push
+npm run db:seed
+npm run dev
+```
+
+Mở Terminal thứ hai:
+
+```powershell
+cd frontend
+Copy-Item .env.example .env.local
+npm install
+npm run dev
+```
+
+Lưu ý Node.js phải đang trong PATH. Nếu muốn kiểm tra độc lập frontend trước, backend phải đang chạy; ngược lại màn hình sẽ báo lỗi kết nối (thay vì trắng trang). Lần đầu phải tải npm dependency (có Internet).
+
+## 3. Cấu trúc thư mục tối giản
 
 ```text
-├── schema.sql                         # Khởi tạo bảng SQL & nạp dữ liệu gốc (32 món thực đơn, chi nhánh, voucher)
-├── server.ts                          # Server Entry Point (Express API + Vite Dev Server trên cổng 3000)
-├── server/                            # Backend API Service
-│   ├── auth.ts                        # Mã hóa mật khẩu (bcryptjs) & Ký/Xác thực JWT Token
-│   ├── db.ts                          # Bộ quản lý kết nối SQL (PostgreSQL Pool + Embedded SQLite fallback)
-│   └── routes/
-│       ├── auth.ts                    # POST /api/auth/register, /api/auth/login, GET /api/auth/me, PUT /api/auth/profile
-│       ├── menu.ts                    # GET /api/menu, GET /api/menu/:id, POST /api/menu, PUT /api/menu/:id, DELETE
-│       ├── orders.ts                  # GET /api/orders, POST /api/orders, GET /api/orders/:id, PUT /api/orders/:id/status
-│       └── meta.ts                    # GET /api/branches, GET /api/vouchers, GET /api/loyalty-history
-├── src/                               # Frontend Single Page Application (React 19 + TypeScript + Tailwind CSS)
-│   ├── components/                    # Thành phần giao diện (MenuPage, CartDrawer, CheckoutPage, OrderHistoryPage...)
-│   ├── context/                       # AppContext kết nối toàn diện Store và API
-│   ├── constants/                     # Cấu hình hằng số (SIZES, TOPPINGS, PAYMENT_METHODS, DEFAULT_BRANCHES)
-│   ├── hooks/                         # React Query Hooks (useProducts, useOrders, useAuth, useVoucher...)
-│   ├── services/                      # HTTP API Client kết nối Backend qua fetch
-│   ├── stores/                        # Zustand Store (Auth, Cart, UI)
-│   ├── types/                         # TypeScript interfaces (Product, Order, User, CartItem...)
-│   └── utils/                         # Helpers định dạng tiền VND, ngày giờ, trạng thái đơn
-├── .env.example                       # Mẫu cấu hình biến môi trường kết nối SQL
-└── package.json                       # Scripts và dependencies dự án
+BrewLite_DeHieu_Fullstack/
+├── docker-compose.yml             # Bật 3 dịch vụ
+├── .env.example                   # Cấu hình phát triển
+├── frontend/                      # Next.js + React
+│   ├── package.json               # Khai báo thư viện và npm scripts
+│   └── src/
+│       ├── app/page.tsx            # Điểm vào và chuyển các màn hình
+│       ├── app/layout.tsx          # Khung HTML
+│       ├── app/globals.css         # Tailwind + ít CSS
+│       ├── components/             # Menu, Cart, AuthForm, Checkout, Orders
+│       ├── context/CartContext.tsx # React Context: giữ giỏ hàng
+│       └── lib/
+│           ├── api.ts              # fetch REST API: CHỈ 1 NƠI
+│           └── types.ts            # Dữ liệu TypeScript và hàm format tiền
+└── backend/                       # NestJS + Prisma
+    ├── prisma/schema.prisma        # Cấu trúc bảng
+    ├── prisma/seed.ts              # 32 món + voucher
+    └── src/
+        ├── main.ts                 # Khởi động NestJS
+        ├── app.module.ts           # Đăng ký Controller và Service
+        ├── prisma.service.ts       # Kết nối PostgreSQL
+        ├── auth/                   # register, login, JWT guard
+        ├── products/               # GET /products
+        ├── orders/                 # POST /orders, kiểm kho, state machine
+        └── payments/               # POST /payments, idempotency
 ```
 
----
+**Đọc `docs/01-HUONG-DI-CUA-CODE.md` để lần theo flow đặt hàng từng bước**; đọc `docs/02-API.md` để test POST với Postman.
 
-## 2. Thiết Kế Cơ Sở Dữ Liệu SQL (`schema.sql`)
+## Thứ tự chạy:
+1. Mở menu: tìm các món, chọn size/topping, thêm 2 món vào giỏ.
+2. Mở giỏ: tăng/giảm số lượng và nhìn tổng tiền.
+3. Đăng ký: email chưa dùng + mật khẩu tối thiểu 6 ký tự; đăng nhập.
+4. Chọn Ví/Thẻ; thử voucher `BANMOI15` (đơn >=40.000đ), chọn thanh toán. Màn hình xác nhận hiện mã đơn `PAID`.
+5. Mở Lịch sử đơn và xem trạng thái, tổng tiền; đăng nhập lại vẫn thấy vì dữ liệu trong PostgreSQL.
+6. Bật "Mô phỏng thất bại", thử lại bằng checkbox bỏ chọn; giỏ hàng vẫn được giữ khi thanh toán lỗi.
+7. Demo Task 10 qua unit test và kiểm tra integration riêng.
 
-Hệ thống cơ sở dữ liệu quan hệ tuân theo chuẩn ANSI SQL, tương thích 100% với cả **PostgreSQL** và **SQLite**:
+## 5. Kiểm thử
 
-1. **`users`**: Quản lý tài khoản khách hàng, mật khẩu băm bảo mật (`password_hash` qua bcrypt), hạng hội viên (`membership_tier`), điểm thưởng tích lũy (`loyalty_points`), chi nhánh ưa thích.
-2. **`menu_items`**: Lưu trữ 32 món ăn/thức uống gốc phân theo 5 danh mục (*Cà phê Việt Nam, Cà phê pha máy, Trà & Trà sữa, Bánh ngọt & Bánh mì, Kem Gelato thủ công*), hỗ trợ cờ ẩn/hiện món (`is_active`).
-3. **`branches`**: Quản lý mạng lưới chi nhánh quầy Barista nhận nước.
-4. **`vouchers`**: Quản lý mã ưu đãi, mức giảm giá, đơn hàng tối thiểu và điểm thưởng cần để đổi.
-5. **`orders`**: Lưu trữ đơn hàng phát sinh riêng biệt theo từng `user_id`, mã nhận tại quầy (`pickup_code`), trạng thái pha chế (`PAID`, `PREPARING`, `READY`, `COMPLETED`), phương thức thanh toán.
-6. **`order_items`**: Chi tiết từng món trong đơn (size, lượng đá, lượng đường, ghi chú, danh sách topping JSON).
-7. **`loyalty_history`**: Nhật ký giao dịch cộng/trừ điểm thưởng của từng khách hàng.
-
----
-
-## 3. Hệ Thống Backend RESTful API
-
-| Method | Endpoint | Mô tả | Quyền truy cập |
-|---|---|---|---|
-| `POST` | `/api/auth/register` | Đăng ký tài khoản khách hàng mới vào SQL | Public |
-| `POST` | `/api/auth/login` | Đăng nhập tài khoản & nhận JWT Token | Public |
-| `GET` | `/api/auth/me` | Lấy thông tin tài khoản hiện tại | Bearer Token |
-| `PUT` | `/api/auth/profile` | Cập nhật họ tên, SĐT, avatar, chi nhánh yêu thích | Bearer Token |
-| `PUT` | `/api/auth/password` | Đổi mật khẩu tài khoản | Bearer Token |
-| `POST` | `/api/auth/redeem-points` | Đổi điểm thưởng thành voucher giảm giá | Bearer Token |
-| `GET` | `/api/menu` | Lấy toàn bộ thực đơn 32 món (hỗ trợ lọc category, search) | Public |
-| `GET` | `/api/menu/:id` | Xem chi tiết 1 món ăn/thức uống | Public |
-| `POST` | `/api/menu` | Thêm món mới vào thực đơn SQL | Admin / Barista |
-| `GET` | `/api/orders` | Lấy lịch sử đơn hàng của người dùng đăng nhập | Bearer Token |
-| `POST` | `/api/orders` | Tạo đơn hàng mới và lưu chi tiết vào SQL | Public / Auth |
-| `PUT` | `/api/orders/:id/status`| Cập nhật trạng thái pha chế đơn hàng | Public / Barista |
-| `GET` | `/api/branches` | Lấy danh sách chi nhánh quầy Barista | Public |
-| `GET` | `/api/vouchers` | Lấy danh sách phiếu ưu đãi | Public |
-| `GET` | `/api/health` | Kiểm tra tình trạng hoạt động của Server | Public |
-
----
-
-## 4. Hướng Dẫn Cấu Hình Kết Nối SQL (`.env`)
-
-Ứng dụng hỗ trợ cơ chế linh hoạt **Dual-Engine Database**:
-
-### Cách 1: Chạy ngay với SQLite nhúng (Zero-Config)
-Nếu không thiết lập biến môi trường cơ sở dữ liệu, server sẽ tự động sử dụng **SQLite nhúng (`sql.js`)** lưu trữ bền vững tại file `data/app.db`. File `schema.sql` sẽ tự động được thực thi để nạp toàn bộ cấu trúc bảng và 32 món thực đơn ngay lần đầu khởi động.
-
-### Cách 2: Kết nối PostgreSQL ngoài (Production)
-Tạo file `.env` tại thư mục gốc dự án và điền chuỗi kết nối:
-
-```env
-# Chuỗi kết nối PostgreSQL dạng URL:
-DATABASE_URL="postgresql://postgres:mat_khau_cua_ban@localhost:5432/brewlite"
-
-# Hoặc từng thông số riêng lẻ:
-SQL_HOST="localhost"
-SQL_PORT="5432"
-SQL_DB_NAME="brewlite"
-SQL_USER="postgres"
-SQL_PASSWORD="mat_khau_cua_ban"
-
-# Khóa bí mật bảo mật cho JWT:
-JWT_SECRET="chuoi_bi_mat_rat_dai_va_an_toan_2026"
+```powershell
+cd backend
+npm test            # unit test state machine, giá size/topping
+npm run build       # biên dịch NestJS
 ```
 
-Khi có biến môi trường trên, `server/db.ts` sẽ tự động kết nối qua `pg.Pool`, tự kiểm tra và đồng bộ cấu trúc bảng từ `schema.sql`.
+**Integration test bắt buộc có PostgreSQL test riêng**, không dùng DB lưu đơn cá nhân. Đặt `TEST_DATABASE_URL`, chạy `DATABASE_URL=<testdb> npx prisma db push` theo shell phù hợp và sau đó `npm run test:integration`. Khi không cấu hình `TEST_DATABASE_URL`, Jest chủ động skip integration chứ không xác nhận đã đạt. Xem test `backend/test/integration.spec.ts`.
 
----
+## 6. Tình trạng và giới hạn
 
-## 5. Khởi Chạy Dự Án
+- Đã viết backend cơ bản và cấu trúc frontend đơn giản. Cấu hình có logic kiểm kho giao dịch, khóa idempotency, voucher/loyalty.
+- Đây là bản **để học và thử nghiệm**, không dành cho người dùng thật; thanh toán là mock; JWT ở localStorage chỉ nên dùng trong demo (production cần cơ chế cookie httpOnly, rate limit, quản lý secret và quyền truy cập chặt hơn).
+- Chưa thể xác nhận `npm install`, `next build`, `nest build`, hoặc Docker end-to-end trên môi trường soạn file vì npm registry hiện không truy cập được. Sau khi tải về, hãy chạy các lệnh trên máy có Internet và gửi log nếu còn lỗi.
+- Scrum (Product Backlog, Sprint Planning, Daily, Review, Retrospective, Burndown), commit/review Git và benchmark API <500ms vẫn cần nhóm thực hiện, lưu bằng chứng theo đề.
+- Bản này **ưu tiên MVP dễ hiểu**, không chuyển toàn bộ tiện ích tài khoản, đổi mật khẩu, voucher nâng cao của giao diện cũ; source ZIP bạn gửi vẫn riêng biệt không bị ghi đè.
 
-```bash
-# Cài đặt thư viện dependencies
-npm install
+## 7. Kiểm tra API end-to-end bằng một lệnh (không cần Postman)
 
-# Khởi chạy Full-Stack Development Server (Express + Vite trên cổng 3000)
-npm run dev
+Khi NestJS + PostgreSQL đã chạy:
 
-# Kiểm tra cú pháp và kiểu dữ liệu TypeScript
-npm run lint
-
-# Biên dịch gói Production
-npm run build
-
-# Khởi chạy máy chủ Production
-npm run start
+```powershell
+cd backend
+npm run smoke
 ```
+
+Script `backend/scripts/smoke.mjs` tự tạo tài khoản thử (email ngẫu nhiên), lấy menu, đặt đơn, trả tiền giả lập, gửi lại cùng Idempotency-Key và đọc lịch sử. Nó tạo dữ liệu thật trong DB phát triển; **không chạy trên production**. Nếu in `SMOKE TEST PASSED!`, các API chính đã chạy trong môi trường của bạn. Đây là **script được cung cấp để bạn tự chạy**, chưa được thực thi end-to-end trong môi trường soạn file.
+
+## 8. Scrum theo đề bài
