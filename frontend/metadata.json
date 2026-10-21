@@ -1,0 +1,6 @@
+{
+  "name": "BrewLite - Cashless Coffee Ordering MVP",
+  "description": "BrewLite - Ứng dụng đặt cà phê không dùng tiền mặt với giao diện Wireframe chuẩn mực và luồng nghiệp vụ đầy đủ.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

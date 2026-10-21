@@ -1,22 +1,3 @@
-<<<<<<< Updated upstream:src/App.tsx
-import React from 'react';
-import { NhaCungCapTruyVan } from './lib/nha-cung-cap-truy-van';
-import { AppProvider, useApp } from './context/AppContext';
-import { Header } from './components/Header';
-import { MenuPage } from './components/MenuPage';
-import { ProductDetailModal } from './components/ProductDetailModal';
-import { CartDrawer } from './components/CartDrawer';
-import { CheckoutPage } from './components/CheckoutPage';
-import { OrderConfirmationPage } from './components/OrderConfirmationPage';
-import { OrderHistoryPage } from './components/OrderHistoryPage';
-import { PaymentFailureModal } from './components/PaymentFailureModal';
-import { AuthModal } from './components/AuthModal';
-import { Footer } from './components/Footer';
-import { AccountProfilePage } from './components/account/AccountProfilePage';
-import { TrangDiemThuong } from './components/diem-thuong/diem-thuong';
-import { useGiaoDienStore } from './stores';
-import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
-=======
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -39,7 +20,6 @@ import {
   getStoredUser,
   setStoredUser,
 } from './api';
->>>>>>> Stashed changes:frontend/src/App.tsx
 
 // --- Screen Navigation ---
 type Screen = 'auth' | 'menu' | 'product-detail' | 'cart' | 'checkout' | 'success' | 'history';
@@ -772,10 +752,6 @@ export default function App() {
       {/* Viewport Wireframe Container: Responsive Mobile (1 cột) / Tablet / Desktop */}
       <div className="w-full max-w-[380px] md:max-w-xl lg:max-w-2xl border border-gray-400 rounded-3xl p-4 sm:p-6 flex flex-col justify-between min-h-[580px] relative bg-white">
 
-<<<<<<< Updated upstream:src/App.tsx
-      {/* Brand Header */}
-      <Header />
-=======
         {/* ------------------------------------------ */}
         {/* MÀN HÌNH 1: ĐĂNG NHẬP / ĐĂNG KÝ (/auth)    */}
         {/* ------------------------------------------ */}
@@ -790,7 +766,6 @@ export default function App() {
                 <div className="text-center font-bold text-sm">
                   {authMode === 'login' ? 'Đăng nhập' : 'Đăng ký'}
                 </div>
->>>>>>> Stashed changes:frontend/src/App.tsx
 
                 {authError && (
                   <div className="text-xs text-red-600 text-center border border-red-400 p-1.5 bg-stone-100">
