@@ -129,4 +129,11 @@ public class OrderController {
         return orderService.cancelOrder(id, reason);
     }
 
+    @PostMapping("/{id}/items")
+    public OrderResponseDTO addItemsToOrder(
+            @PathVariable Long id, 
+            @RequestBody OrderRequestDTO extraItemsDto) {
+        return orderService.addItemsToOrder(id, extraItemsDto);
+    }
+
 }

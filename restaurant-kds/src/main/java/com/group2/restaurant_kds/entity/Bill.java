@@ -9,6 +9,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.OneToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 @Entity 
@@ -32,6 +34,16 @@ public class Bill {
         this.discount = discount;
         this.paymentMethod = paymentMethod;
         this.paidAt = paidAt;
+    }
+    @PrePersist
+    protected void onCreate() {
+        this.paidAt = LocalDateTime.now();
+    }
+
+    // Tự động cập nhật giờ mỗi khi có thay đổi (Update)
+    @PreUpdate
+    protected void onUpdate() {
+        this.paidAt = LocalDateTime.now();
     }
     public Bill(){}
     public Long getId() {

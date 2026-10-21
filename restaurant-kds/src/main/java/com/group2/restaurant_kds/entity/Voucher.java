@@ -81,6 +81,17 @@ public class Voucher {
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
     }
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    // Tự động cập nhật giờ mỗi khi có thay đổi (Update)
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
     public Long getId() {
         return id;
     }

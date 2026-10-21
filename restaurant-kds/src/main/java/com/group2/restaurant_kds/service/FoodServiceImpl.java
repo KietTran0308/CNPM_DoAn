@@ -11,7 +11,10 @@ import com.group2.restaurant_kds.entity.Food;
 import com.group2.restaurant_kds.dto.food.FoodResponseDTO;
 import com.group2.restaurant_kds.dto.food.FoodRequestDTO;
 import com.group2.restaurant_kds.repository.FoodRepository;
+
+import jakarta.transaction.Transactional;
 @Service 
+@Transactional
 public class FoodServiceImpl implements FoodService{
     private final FoodRepository foodRepository;
     @Autowired
@@ -52,6 +55,8 @@ public class FoodServiceImpl implements FoodService{
             Category category = categoryService.getCategoryEntityById(dto.getCategoryId());
             food.setCategory(category);
         }
+        food.setSlug(dto.getName().toLowerCase().replaceAll(" ", "-"));
+        food.setSku("FOOD-" + System.currentTimeMillis());
         return mapToDto(foodRepository.save(food));
     }
 

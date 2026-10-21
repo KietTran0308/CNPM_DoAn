@@ -9,29 +9,37 @@ import org.springframework.stereotype.Service;
 import com.group2.restaurant_kds.dto.order.DeliveryInfoDTO;
 import com.group2.restaurant_kds.dto.order.OrderRequestDTO;
 import com.group2.restaurant_kds.dto.order.OrderResponseDTO;
+import com.group2.restaurant_kds.dto.orderItem.OrderItemRequestDTO;
 import com.group2.restaurant_kds.dto.orderItem.OrderItemResponseDTO;
+import com.group2.restaurant_kds.entity.Food;
 import com.group2.restaurant_kds.entity.Order;
 import com.group2.restaurant_kds.entity.OrderItem;
 import com.group2.restaurant_kds.entity.OrderItem.OrderItemStatus;
 import com.group2.restaurant_kds.entity.RestaurantTable;
 import com.group2.restaurant_kds.entity.Voucher;
+import com.group2.restaurant_kds.repository.FoodRepository;
 import com.group2.restaurant_kds.repository.OrderRepository;
 import com.group2.restaurant_kds.repository.OrderitemRepository;
 import com.group2.restaurant_kds.repository.RestaurantTableRepository;
 import com.group2.restaurant_kds.repository.VoucherRepository;
 
+import jakarta.transaction.Transactional;
+
 @Service 
+@Transactional 
 public class OrderServiceImpl implements OrderService{
 
     private final OrderRepository orderRepository;
     private final RestaurantTableRepository tableRepository;
     private final OrderitemRepository orderItemRepository;
     private final VoucherRepository voucherRepository;
-    public OrderServiceImpl (OrderRepository orderRepository, RestaurantTableRepository tableRepository, OrderitemRepository orderItemRepository, VoucherRepository voucherRepository){
+    private final FoodRepository foodRepository;
+    public OrderServiceImpl (OrderRepository orderRepository, RestaurantTableRepository tableRepository, OrderitemRepository orderItemRepository, VoucherRepository voucherRepository, FoodRepository foodRepository){
         this.orderRepository = orderRepository;
         this.tableRepository = tableRepository;
         this.orderItemRepository = orderItemRepository;
         this.voucherRepository = voucherRepository;
+        this.foodRepository = foodRepository;
     }
 
 
@@ -132,18 +140,16 @@ public class OrderServiceImpl implements OrderService{
     @Override
     public OrderResponseDTO createOrder(OrderRequestDTO dto) {
         Order order = new Order();
-        // Cài đặt thông tin cơ bản
         order.setOrderType(dto.getOrderType());
         order.setNote(dto.getNote());
-        order.setStatus("PENDING"); // Mặc định khi mới tạo
-        // Gán bàn nếu có
+        order.setStatus("PENDING"); 
+        
         if (dto.getTableId() != null) {
             RestaurantTable table = tableRepository.findById(dto.getTableId())
                     .orElseThrow(() -> new RuntimeException("Không tìm thấy bàn"));
             order.setTable(table);
         }
         
-        // Lưu Delivery Info nếu là đơn giao hàng
         if (dto.getDeliveryInfo() != null) {
             order.setReceiverName(dto.getDeliveryInfo().getReceiverName());
             order.setReceiverPhone(dto.getDeliveryInfo().getReceiverPhone());
@@ -151,17 +157,31 @@ public class OrderServiceImpl implements OrderService{
             order.setShippingFee(dto.getDeliveryInfo().getShippingFee());
         }
 
-        // Khởi tạo danh sách Item
+        // --- LOGIC BỔ SUNG: XỬ LÝ DANH SÁCH MÓN ĂN ---
         List<OrderItem> items = new ArrayList<>();
-        // Giả sử dto có getItems() chứa thông tin món ăn được đặt
-        // Code chi tiết phụ thuộc vào OrderRequestDTO của bạn
-        
+        if (dto.getItems() != null) {
+            for (OrderItemRequestDTO itemDto : dto.getItems()) {
+                // Chọc xuống database lấy giá gốc và tên món ăn
+                Food food = foodRepository.findById(itemDto.getFoodId())
+                        .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn với ID: " + itemDto.getFoodId()));
+                
+                OrderItem orderItem = new OrderItem();
+                orderItem.setOrder(order);
+                orderItem.setFood(food);
+                orderItem.setFoodsName(food.getName()); // Lưu lại tên món
+                orderItem.setUnitPrice(food.getPrice()); // Tuyệt đối dùng giá từ DB
+                orderItem.setQuantity(itemDto.getQuantity());
+                
+                items.add(orderItem);
+            }
+        }
         order.setOrderItems(items);
-        //  recalculateTotals(order); // Hàm phụ tự viết bên dưới
+        
+        // MỞ COMMENT: Bắt buộc gọi hàm này để tính thành tiền từng món và tổng đơn
+        recalculateTotals(order); 
         
         return mapToDTO(orderRepository.save(order));
     }
-
     @Override
     public OrderResponseDTO updateOrder(Long id, OrderRequestDTO dto) {
         Order order = orderRepository.findById(id)
@@ -317,28 +337,34 @@ public class OrderServiceImpl implements OrderService{
         return mapToDTO(orderRepository.save(order));
     }
 
- /*    @Override
+    @Override
     public OrderResponseDTO addItemsToOrder(Long orderId, OrderRequestDTO extraItemsDto) {
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy đơn hàng"));
 
-        // Lặp qua dto để tạo các OrderItem mới (Tương tự như lúc createOrder)
-        // Giả sử logic tạo OrderItem ở đây:
-        /*
-        for(ItemRequest itemDto : extraItemsDto.getItems()) {
-            Food food = foodRepository.findById(itemDto.getFoodId()).orElseThrow(...);
-            OrderItem newItem = new OrderItem();
-            newItem.setFood(food);
-            newItem.setQuantity(itemDto.getQuantity());
-            newItem.setUnitPrice(food.getPrice());
-            newItem.setOrder(order);
-            
-            order.getOrderItems().add(newItem);
+        if (extraItemsDto.getItems() != null) {
+            // Đổi ItemRequest thành OrderItemRequestDTO
+            for (OrderItemRequestDTO itemDto : extraItemsDto.getItems()) {
+                
+                // Xóa dấu ... và hoàn thiện lệnh tìm món ăn
+                Food food = foodRepository.findById(itemDto.getFoodId())
+                        .orElseThrow(() -> new RuntimeException("Không tìm thấy món ăn với ID: " + itemDto.getFoodId()));
+                
+                OrderItem newItem = new OrderItem();
+                newItem.setFood(food);
+                newItem.setFoodsName(food.getName()); // Bổ sung tên món
+                newItem.setQuantity(itemDto.getQuantity());
+                newItem.setUnitPrice(food.getPrice());
+                newItem.setOrder(order);
+                
+                order.getOrderItems().add(newItem);
+            }
         }
-            recalculateTotals(order);
+        
+        // Gọi tính lại tổng tiền vì vừa có thêm món
+        recalculateTotals(order);
         return mapToDTO(orderRepository.save(order));
     }
-        */
 
 
     @Override

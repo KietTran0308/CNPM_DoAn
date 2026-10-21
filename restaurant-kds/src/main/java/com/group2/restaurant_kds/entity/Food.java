@@ -9,6 +9,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 @Entity 
@@ -46,6 +48,20 @@ public class Food {
         this.updatedAt = updatedAt;
     }
     public Food(){}
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+        if (this.stockQuantity == null) this.stockQuantity = 0;
+        if (this.isPublished == null) this.isPublished = true;
+        if (this.isDeleted == null) this.isDeleted = false;
+    }
+
+    // Tự động cập nhật giờ mỗi khi có thay đổi (Update)
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
     public long getId() {
         return id;
     }

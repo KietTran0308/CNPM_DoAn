@@ -14,6 +14,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 @Entity 
@@ -94,6 +96,19 @@ public class Order {
         this.orderItems = orderItems;
     }
     public Order(){}
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+        if (this.status == null) this.status = "PENDING";
+        if (this.shippingFee == null) this.shippingFee = BigDecimal.ZERO;
+    }
+
+    // Tự động cập nhật giờ mỗi khi có thay đổi (Update)
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
     public Long getId() {
         return id;
     }

@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.*;
 import com.group2.restaurant_kds.dto.category.CategoryRequestDTO;
 import com.group2.restaurant_kds.dto.category.CategoryResponseDTO;
-import com.group2.restaurant_kds.repository.CategoryRepository;
 import com.group2.restaurant_kds.service.CategoryService;
 
 @RestController

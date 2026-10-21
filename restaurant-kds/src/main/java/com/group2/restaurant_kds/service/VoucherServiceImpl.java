@@ -11,7 +11,10 @@ import com.group2.restaurant_kds.dto.voucher.VoucherResponseDTO;
 import com.group2.restaurant_kds.entity.Voucher;
 import com.group2.restaurant_kds.repository.VoucherRepository;
 
+import jakarta.transaction.Transactional;
+
 @Service 
+@Transactional
 public class VoucherServiceImpl implements VoucherService {
     private final VoucherRepository voucherRepository;
     public VoucherServiceImpl(VoucherRepository voucherRepository){

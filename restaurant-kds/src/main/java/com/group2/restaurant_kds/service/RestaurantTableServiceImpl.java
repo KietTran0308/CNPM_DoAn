@@ -9,7 +9,10 @@ import com.group2.restaurant_kds.dto.restaurantTable.RestaurantTableResponseDTO;
 import com.group2.restaurant_kds.entity.RestaurantTable;
 import com.group2.restaurant_kds.repository.RestaurantTableRepository;
 
+import jakarta.transaction.Transactional;
+
 @Service 
+@Transactional
 public class RestaurantTableServiceImpl implements RestaurantTableService {
     private final RestaurantTableRepository repository;
     public RestaurantTableServiceImpl (RestaurantTableRepository repository){
@@ -41,7 +44,7 @@ public class RestaurantTableServiceImpl implements RestaurantTableService {
         RestaurantTable table = new RestaurantTable();
         table.setTableName(dto.getTableName());
         table.setCapacity(dto.getCapacity());
-
+        table.setStatus(dto.GetStatus());
         RestaurantTable tableSave = repository.save(table);
         return mapToDto(tableSave);
 

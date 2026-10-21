@@ -8,6 +8,16 @@ public class UserResponseDTO {
     private String fullName;
     private String phone;
     private String role;
+    public UserResponseDTO (){}
+    
+    public UserResponseDTO(Long id, String email, String fullName, String phone, String role) {
+        this.id = id;
+        this.email = email;
+        this.fullName = fullName;
+        this.phone = phone;
+        this.role = role;
+    }
+
     public Long getId() {
         return id;
     }

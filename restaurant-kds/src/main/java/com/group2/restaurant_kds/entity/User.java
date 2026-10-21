@@ -7,6 +7,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 
 @Entity 
@@ -36,6 +38,19 @@ public class User {
         this.updatedAt = updatedAt;
     }
     public User() {}
+    @PrePersist
+    protected void onCreate() {
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+        if (this.role == null) this.role = "USER";
+        if (this.isActive == null) this.isActive = true;
+    }
+
+    // Tự động cập nhật giờ mỗi khi có thay đổi (Update)
+    @PreUpdate
+    protected void onUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
     public long getId() {
         return id;
     }

@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import com.group2.restaurant_kds.dto.food.FoodRequestDTO;
 import com.group2.restaurant_kds.dto.food.FoodResponseDTO;
-import com.group2.restaurant_kds.entity.Food;
+
 import com.group2.restaurant_kds.service.FoodService;
 
 @RestController 

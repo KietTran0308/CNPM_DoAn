@@ -33,7 +33,7 @@ public interface  OrderService {
     //===================
     OrderResponseDTO applyVoucher(Long orderId, String voucherCode);
     OrderResponseDTO removeVoucher(Long orderId);
-    // OrderResponseDTO addItemsToOrder(Long orderId, OrderRequestDTO extraItemsDto);
+    OrderResponseDTO addItemsToOrder(Long orderId, OrderRequestDTO extraItemsDto);
 
 
 

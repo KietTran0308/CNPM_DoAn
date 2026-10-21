@@ -2,12 +2,12 @@ package com.group2.restaurant_kds.dto.orderItem;
 
 
 public class OrderItemRequestDTO {
-    private String foodId;
+    private Long foodId;
     private Integer quantity;
-    public String getFoodId() {
+    public Long getFoodId() {
         return foodId;
     }
-    public void setFoodId(String foodId) {
+    public void setFoodId(Long foodId) {
         this.foodId = foodId;
     }
     public Integer getQuantity() {

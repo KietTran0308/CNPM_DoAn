@@ -3,8 +3,6 @@ package com.group2.restaurant_kds.controller;
 import com.group2.restaurant_kds.dto.bill.BillRequestDTO;
 import com.group2.restaurant_kds.dto.bill.BillResponseDTO;
 import com.group2.restaurant_kds.service.BillService;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;

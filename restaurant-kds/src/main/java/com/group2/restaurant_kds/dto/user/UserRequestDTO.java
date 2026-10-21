@@ -1,9 +1,11 @@
 package com.group2.restaurant_kds.dto.user;
 
-public class UserCreateDTO {
+public class UserRequestDTO {
     private String email;
     private String fullName;
     private String phone;
+    private String password; // mk tạm
+    
     public String getEmail() {
         return email;
     }
@@ -21,6 +23,12 @@ public class UserCreateDTO {
     }
     public void setPhone(String phone) {
         this.phone = phone;
+    }
+    public String getPassword() {
+        return password;
+    }
+    public void setPassword(String password) {
+        this.password = password;
     }
     
 }

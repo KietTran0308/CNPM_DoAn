@@ -7,7 +7,10 @@ import com.group2.restaurant_kds.dto.category.CategoryRequestDTO;
 import com.group2.restaurant_kds.dto.category.CategoryResponseDTO;
 import com.group2.restaurant_kds.repository.CategoryRepository;
 
+import jakarta.transaction.Transactional;
+
 @Service 
+@Transactional
 public class CategoryServiceImpl implements CategoryService{
     private final CategoryRepository categoryRepository;
     public CategoryServiceImpl(CategoryRepository categoryRepository) {
