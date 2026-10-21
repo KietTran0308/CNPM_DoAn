@@ -1,6 +1,11 @@
 {
+<<<<<<< Updated upstream:metadata.json
   "name": "BrewLite - Ứng Dụng Đặt Cà Phê Không Dùng Tiền Mặt",
   "description": "Ứng dụng gọi món và đặt cà phê Brew Lite với thực đơn đa dạng cà phê pha phin, cà phê máy, bánh ngọt nướng tươi và kem gelato hảo hạng.",
+=======
+  "name": "BrewLite - Cashless Coffee Ordering MVP",
+  "description": "BrewLite - Ứng dụng đặt cà phê không dùng tiền mặt với giao diện Wireframe chuẩn mực và luồng nghiệp vụ đầy đủ.",
+>>>>>>> Stashed changes:frontend/metadata.json
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

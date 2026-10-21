@@ -1,4 +1,5 @@
 @import "tailwindcss";
+<<<<<<< Updated upstream:src/index.css
 
 @theme {
   --radius-glass: 20px;
@@ -323,3 +324,5 @@
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(3, 85, 66, 0.4);
 }
+=======
+>>>>>>> Stashed changes:frontend/src/index.css
