@@ -10,7 +10,6 @@ import { Prisma } from "@prisma/client";
 export class ProductsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Lấy danh sách món đang hoạt động
   async findAll() {
     return this.prisma.product.findMany({
       where: { isActive: true },
@@ -18,7 +17,6 @@ export class ProductsService {
     });
   }
 
-  // Lấy danh sách size và topping
   async getOptions() {
     const [sizes, toppings] = await Promise.all([
       this.prisma.sizePrice.findMany(),
@@ -31,7 +29,6 @@ export class ProductsService {
     return { sizes, toppings };
   }
 
-  // Lấy chi tiết món theo code
   async findById(id: string) {
     const product = await this.prisma.product.findFirst({
       where: {
