@@ -1,13 +1,17 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { CartItem, SizeOption, ToppingOption } from '../types';
-import { DEFAULT_VOUCHERS as AVAILABLE_VOUCHERS, DEFAULT_BRANCHES as BRANCHES } from '../constants';
+import { DEFAULT_VOUCHERS, DEFAULT_BRANCHES as BRANCHES } from '../constants';
+import { USE_MOCK_API } from '../services/api';
+import type { VoucherItem } from '../types';
 
 export interface TrangThaiGioHang {
   items: CartItem[];
   voucherCode: string;
   discount: number;
   pointsDiscount: number;
+  availableVouchers: VoucherItem[];
+  setAvailableVouchers: (v: VoucherItem[]) => void;
   
   // Thông tin nhận nước tại quầy (In-Store Pickup)
   pickupBranch: string;
@@ -59,7 +63,7 @@ const kiemTraLaiVoucher = (
   if (!currentCode) return { voucherCode: '', discount: 0 };
   const subtotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
 
-  const found = AVAILABLE_VOUCHERS.find((v) => v.code === currentCode);
+  const found = useGioHangStore.getState().availableVouchers.find((v) => v.code === currentCode);
   if (found) {
     if (subtotal < found.minOrder) {
       return {
@@ -71,7 +75,7 @@ const kiemTraLaiVoucher = (
     return { voucherCode: currentCode, discount: found.discountAmount };
   }
 
-  if (currentCode === 'BREWFIRST') {
+  if (USE_MOCK_API && currentCode === 'BREWFIRST') {
     if (subtotal < 30000) {
       return { voucherCode: '', discount: 0, reason: 'Mã ưu đãi bị hủy do đơn dưới 30.000đ.' };
     }
@@ -88,6 +92,8 @@ export const useGioHangStore = create<TrangThaiGioHang>()(
       voucherCode: '',
       discount: 0,
       pointsDiscount: 0,
+      availableVouchers: USE_MOCK_API ? DEFAULT_VOUCHERS : [],
+      setAvailableVouchers: (vouchers) => set({ availableVouchers: vouchers }),
       pickupBranch: BRANCHES[0].name,
       pickupTimeType: 'asap',
       scheduledTime: 'Lấy ngay (khoảng 5 - 10 phút)',
@@ -214,7 +220,7 @@ export const useGioHangStore = create<TrangThaiGioHang>()(
           return { success: false, message: 'Giỏ hàng đang trống, không thể áp dụng ưu đãi.' };
         }
 
-        const found = AVAILABLE_VOUCHERS.find((v) => v.code === clean);
+        const found = get().availableVouchers.find((v) => v.code === clean);
         if (found) {
           if (subtotal < found.minOrder) {
             return {
@@ -229,7 +235,7 @@ export const useGioHangStore = create<TrangThaiGioHang>()(
           };
         }
 
-        if (clean === 'BREWFIRST') {
+        if (USE_MOCK_API && clean === 'BREWFIRST') {
           if (subtotal < 30000) {
             return {
               success: false,

@@ -1,12 +1,26 @@
 @import "tailwindcss";
-:root { color-scheme: light; }
-html, body { min-height: 100%; }
-body { margin: 0; font-family: 'Work Sans', Arial, Helvetica, sans-serif; }
-.fluid-container { width: min(100%, 1440px); margin-inline: auto; padding-inline: clamp(1rem, 3vw, 3rem); }
-.liquid-glass { background: rgb(255 255 255 / 75%); backdrop-filter: blur(16px); }
-.liquid-glass-emerald { background: linear-gradient(135deg, #145c4b, #035542); }
-.liquid-glass-butter { background: linear-gradient(135deg, #fffbeb, #fef3c7); }
-.liquid-glass-dark { background: rgb(24 32 27 / 85%); backdrop-filter: blur(14px); }
-.font-billboard { font-family: 'Work Sans', sans-serif; font-weight: 900; }
-.font-mono { font-family: 'JetBrains Mono', monospace; }
-.touch-target { min-height: 40px; }
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}

@@ -13,6 +13,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { HartzlerWordmark } from './HartzlerBrand';
+import { authApi } from '../services/auth.api';
 
 export const AuthModal: React.FC = () => {
   const {
@@ -21,8 +22,6 @@ export const AuthModal: React.FC = () => {
     authModalTab,
     openAuthModal,
     user,
-    login,
-    register,
     logout,
     setCurrentScreen,
   } = useApp();
@@ -42,14 +41,71 @@ export const AuthModal: React.FC = () => {
 
   if (!isAuthModalOpen) return null;
 
+  const validateLogin = (): boolean => {
+    if (!loginEmail.trim()) {
+      setErrorMsg('Vui lòng nhập email đăng nhập.');
+      return false;
+    }
+    const emailRegex = /\S+@\S+\.\S+/;
+    if (!emailRegex.test(loginEmail)) {
+      setErrorMsg('Email đăng nhập không hợp lệ.');
+      return false;
+    }
+    if (!loginPassword) {
+      setErrorMsg('Vui lòng nhập mật khẩu.');
+      return false;
+    }
+    return true;
+  };
+
+  const validateRegister = (): boolean => {
+    if (!regName.trim()) {
+      setErrorMsg('Vui lòng nhập họ và tên.');
+      return false;
+    }
+    if (!regEmail.trim()) {
+      setErrorMsg('Vui lòng nhập email.');
+      return false;
+    }
+    const emailRegex = /\S+@\S+\.\S+/;
+    if (!emailRegex.test(regEmail)) {
+      setErrorMsg('Email không hợp lệ.');
+      return false;
+    }
+    if (!regPassword) {
+      setErrorMsg('Vui lòng nhập mật khẩu.');
+      return false;
+    }
+    if (regPassword.length < 6) {
+      setErrorMsg('Mật khẩu phải có tối thiểu 6 ký tự.');
+      return false;
+    }
+    if (!regConfirmPassword) {
+      setErrorMsg('Vui lòng xác nhận lại mật khẩu.');
+      return false;
+    }
+    if (regPassword !== regConfirmPassword) {
+      setErrorMsg('Mật khẩu xác nhận không trùng khớp.');
+      return false;
+    }
+    return true;
+  };
+
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
+
+    if (!validateLogin()) return;
+
     setIsLoading(true);
 
     try {
-      const res = await login(loginEmail, loginPassword);
+      const res = await authApi.login({
+        email: loginEmail,
+        password: loginPassword,
+      });
+
       if (!res.success) {
         setErrorMsg(res.error || 'Đăng nhập không thành công.');
       } else {
@@ -70,24 +126,22 @@ export const AuthModal: React.FC = () => {
     setErrorMsg(null);
     setSuccessMsg(null);
 
-    if (regPassword !== regConfirmPassword) {
-      setErrorMsg('Mật khẩu xác nhận không trùng khớp.');
-      return;
-    }
-
-    if (regPassword.length < 6) {
-      setErrorMsg('Mật khẩu phải có tối thiểu 6 ký tự.');
-      return;
-    }
+    if (!validateRegister()) return;
 
     setIsLoading(true);
 
     try {
-      const res = await register(regName, regEmail, regPassword, regPhone);
+      const res = await authApi.register({
+        fullName: regName,
+        email: regEmail,
+        phone: regPhone,
+        password: regPassword,
+      });
+
       if (!res.success) {
         setErrorMsg(res.error || 'Đăng ký không thành công.');
       } else {
-        setSuccessMsg('Đăng ký tài khoản thành công và đã lưu vào Database!');
+        setSuccessMsg('Đăng ký tài khoản thành công!');
         setTimeout(() => {
           closeAuthModal();
         }, 800);
@@ -208,14 +262,13 @@ export const AuthModal: React.FC = () => {
             )}
 
             {authModalTab === 'login' ? (
-              <form onSubmit={handleLoginSubmit} className="space-y-3.5">
+              <form onSubmit={handleLoginSubmit} className="space-y-3.5" noValidate>
                 <div>
                   <label className="text-xs font-semibold text-[#333333] mb-1 flex items-center gap-1 uppercase">
                     <Mail className="w-3.5 h-3.5 text-[#145C4B]" /> Email đăng nhập *
                   </label>
                   <input
                     type="email"
-                    required
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
                     placeholder="vidu@email.com"
@@ -231,7 +284,6 @@ export const AuthModal: React.FC = () => {
                   </div>
                   <input
                     type="password"
-                    required
                     value={loginPassword}
                     onChange={(e) => setLoginPassword(e.target.value)}
                     placeholder="Nhập mật khẩu..."
@@ -260,14 +312,13 @@ export const AuthModal: React.FC = () => {
                 </div>
               </form>
             ) : (
-              <form onSubmit={handleRegisterSubmit} className="space-y-3">
+              <form onSubmit={handleRegisterSubmit} className="space-y-3" noValidate>
                 <div>
                   <label className="text-xs font-semibold text-[#333333] mb-1 flex items-center gap-1 uppercase">
                     <UserIcon className="w-3.5 h-3.5 text-[#145C4B]" /> Họ và tên *
                   </label>
                   <input
                     type="text"
-                    required
                     value={regName}
                     onChange={(e) => setRegName(e.target.value)}
                     placeholder="Nguyễn Văn A"
@@ -281,7 +332,6 @@ export const AuthModal: React.FC = () => {
                   </label>
                   <input
                     type="email"
-                    required
                     value={regEmail}
                     onChange={(e) => setRegEmail(e.target.value)}
                     placeholder="vidu@email.com"
@@ -308,7 +358,6 @@ export const AuthModal: React.FC = () => {
                   </label>
                   <input
                     type="password"
-                    required
                     value={regPassword}
                     onChange={(e) => setRegPassword(e.target.value)}
                     placeholder="Tối thiểu 6 ký tự"
@@ -322,7 +371,6 @@ export const AuthModal: React.FC = () => {
                   </label>
                   <input
                     type="password"
-                    required
                     value={regConfirmPassword}
                     onChange={(e) => setRegConfirmPassword(e.target.value)}
                     placeholder="Nhập lại mật khẩu"
