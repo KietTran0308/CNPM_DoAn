@@ -1,9 +1,11 @@
+// frontend/src/context/CartContext.tsx
 import React, { createContext, useContext, useMemo } from 'react';
-import { CartItem, SizeOption, ToppingOption } from '../types';
+import { CartItem, SizeOption, ToppingOption } from '../types/cart';
 import { useCartStore, useUiStore } from '../stores';
+import { useLocalCart } from '../hooks/useLocalCart';
 
 export interface CartContextType {
-  // Cart Items & Actions (useCartStore)
+  // Giỏ hàng & Thao tác
   cart: CartItem[];
   addToCart: (item: Omit<CartItem, 'cartItemId' | 'totalPrice'>) => void;
   updateCartItem: (
@@ -13,7 +15,7 @@ export interface CartContextType {
       toppings: ToppingOption[];
       iceLevel: '0%' | '30%' | '50%' | '100%';
       sugarLevel: '0%' | '30%' | '50%' | '100%';
-      note: string;
+      note?: string;
       quantity: number;
       unitPrice: number;
     }
@@ -22,7 +24,7 @@ export interface CartContextType {
   removeFromCart: (cartItemId: string) => void;
   clearCart: () => void;
 
-  // Pricing & Calculations
+  // Tính toán chi phí
   cartCount: number;
   cartSubtotal: number;
   voucherCode: string;
@@ -32,7 +34,7 @@ export interface CartContextType {
   applyVoucher: (code: string) => { success: boolean; message: string };
   cartTotal: number;
 
-  // In-Store Pickup Options (useCartStore)
+  // Nhận hàng
   pickupBranch: string;
   setPickupBranch: (b: string) => void;
   pickupTimeType: 'asap' | 'scheduled';
@@ -42,19 +44,18 @@ export interface CartContextType {
   pickupNote: string;
   setPickupNote: (n: string) => void;
 
-  // Cart UI States (useUiStore)
+  // UI Modal / Drawer
   isCartOpen: boolean;
   openCart: () => void;
   closeCart: () => void;
-  editingCartItem: CartItem | null;
-  openEditCartItem: (item: CartItem) => void;
-  closeEditCartItem: () => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // 1. Cart Items & Discounts từ CartStore
+  // Đồng bộ giỏ hàng với LocalStorage
+  useLocalCart();
+
   const cart = useCartStore((s) => s.items);
   const addToCart = useCartStore((s) => s.addToCart);
   const updateCartItem = useCartStore((s) => s.updateCartItem);
@@ -67,7 +68,6 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const setPointsDiscount = useCartStore((s) => s.setPointsDiscount);
   const applyVoucher = useCartStore((s) => s.applyVoucher);
 
-  // 2. Pickup Config từ CartStore
   const pickupBranch = useCartStore((s) => s.pickupBranch);
   const setPickupBranch = useCartStore((s) => s.setPickupBranch);
   const pickupTimeType = useCartStore((s) => s.pickupTimeType);
@@ -77,15 +77,10 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const pickupNote = useCartStore((s) => s.pickupNote);
   const setPickupNote = useCartStore((s) => s.setPickupNote);
 
-  // 3. Cart Drawers & Edit Modal từ UiStore
   const isCartOpen = useUiStore((s) => s.isCartOpen);
   const openCart = useUiStore((s) => s.openCart);
   const closeCart = useUiStore((s) => s.closeCart);
-  const editingCartItem = useUiStore((s) => s.editingCartItem);
-  const openEditCartItem = useUiStore((s) => s.openEditCartItem);
-  const closeEditCartItem = useUiStore((s) => s.closeEditCartItem);
 
-  // 4. Computed Values (dùng useMemo để tránh tính toán lại không cần thiết)
   const cartCount = useMemo(
     () => cart.reduce((sum, item) => sum + item.quantity, 0),
     [cart]
@@ -101,38 +96,39 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [cartSubtotal, discount, pointsDiscount]
   );
 
-  const value: CartContextType = {
-    cart,
-    addToCart,
-    updateCartItem,
-    updateQuantity,
-    removeFromCart,
-    clearCart,
-    cartCount,
-    cartSubtotal,
-    voucherCode,
-    discount,
-    pointsDiscount,
-    setPointsDiscount,
-    applyVoucher,
-    cartTotal,
-    pickupBranch,
-    setPickupBranch,
-    pickupTimeType,
-    setPickupTimeType,
-    scheduledTime,
-    setScheduledTime,
-    pickupNote,
-    setPickupNote,
-    isCartOpen,
-    openCart,
-    closeCart,
-    editingCartItem,
-    openEditCartItem,
-    closeEditCartItem,
-  };
-
-  return <CartContext.Provider value={value}>{children}</CartContext.Provider>;
+  return (
+    <CartContext.Provider
+      value={{
+        cart,
+        addToCart,
+        updateCartItem,
+        updateQuantity,
+        removeFromCart,
+        clearCart,
+        cartCount,
+        cartSubtotal,
+        voucherCode,
+        discount,
+        pointsDiscount,
+        setPointsDiscount,
+        applyVoucher,
+        cartTotal,
+        pickupBranch,
+        setPickupBranch,
+        pickupTimeType,
+        setPickupTimeType,
+        scheduledTime,
+        setScheduledTime,
+        pickupNote,
+        setPickupNote,
+        isCartOpen,
+        openCart,
+        closeCart,
+      }}
+    >
+      {children}
+    </CartContext.Provider>
+  );
 };
 
 export const useCart = () => {
