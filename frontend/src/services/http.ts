@@ -5,6 +5,9 @@
 import {mockRequest} from '../mocks/request';
 
 /** Chỉ bật khi muốn thử giao diện không cần chạy NestJS/PostgreSQL. */
+/** Sự kiện phát ra khi backend trả 401 cho một phiên đang đăng nhập. */
+export const AUTH_EXPIRED_EVENT = 'brewlite:auth-expired';
+
 export const USE_MOCK_API = process.env.NEXT_PUBLIC_USE_MOCK_API === 'true';
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 const TOKEN_KEY = 'brewlite_auth_token';
@@ -32,7 +35,15 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
     }
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
-        if (response.status === 401) tokenStorage.remove();
+        if (response.status === 401) {
+            // Token hết hạn/không hợp lệ: xoá token và báo cho AuthContext đăng xuất.
+            // Bỏ qua 401 của chính màn đăng nhập/đăng ký (sai mật khẩu không phải "hết phiên").
+            const hadToken = !!token;
+            tokenStorage.remove();
+            if (hadToken && !path.startsWith('/auth/login') && !path.startsWith('/auth/register') && typeof window !== 'undefined') {
+                window.dispatchEvent(new Event(AUTH_EXPIRED_EVENT));
+            }
+        }
         throw new Error(Array.isArray(body.message) ? body.message.join(', ') : body.message || `API lỗi ${response.status}`);
     }
     return body as T;

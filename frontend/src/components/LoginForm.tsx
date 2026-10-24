@@ -9,7 +9,6 @@ export interface LoginErrors {
   password?: string;
 }
 
-/**Kiểm tra dữ liệu đăng nhập – trả về object rỗng nếu hợp lệ.*/
 export const validateLogin = (email: string, password: string): LoginErrors => {
   const errors: LoginErrors = {};
   if (!email.trim()) errors.email = 'Vui lòng nhập email.';

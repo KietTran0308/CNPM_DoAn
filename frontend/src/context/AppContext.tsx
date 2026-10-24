@@ -13,6 +13,7 @@ import {
 } from '../types';
 import { useCartStore, useUiStore } from '../stores';
 import { useAuthContext } from './AuthContext';
+import { parsePath } from '../lib/routes';
 import { useProducts, useOrders } from '../hooks';
 
 export interface AppContextType {
@@ -93,6 +94,12 @@ export interface AppContextType {
 
   // Orders (TanStack Query + Server State: orderService)
   orders: Order[];
+  isOrdersLoading: boolean;
+  isOrdersError: boolean;
+  refetchOrders: () => void;
+  /** Id đơn đang xem ở màn xác nhận (URL /orders/:id) */
+  viewedOrderId: string | null;
+  openOrderDetail: (orderId: string) => void;
   lastCreatedOrder: Order | null;
   failedReason: string | null;
   createOrder: (paymentMethod: PaymentMethodId, simulateFailure?: boolean, customCustomer?: { name: string; phone: string }) => Promise<{ success: boolean; order?: Order; error?: string }>;
@@ -120,24 +127,16 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [setViewportWidth]);
 
   // Sync browser popstate (back / forward buttons)
-  const setCurrentScreen = useUiStore((s) => s.setCurrentScreen);
   useEffect(() => {
     const handlePopState = () => {
-      const path = window.location.pathname;
-      if (path === '/tai-khoan') setCurrentScreen('account');
-      else if (path === '/diem-thuong') setCurrentScreen('rewards');
-      else if (path === '/uu-dai') setCurrentScreen('vouchers');
-      else if (path === '/don-hang') setCurrentScreen('orders');
-      else if (path === '/thanh-toan') setCurrentScreen('checkout');
-      else if (path === '/xac-nhan') setCurrentScreen('confirmation');
-      else setCurrentScreen('menu');
-
+      // URL → màn hình (gồm /orders và /orders/:id). Dùng setState để không đẩy thêm history.
+      const { screen, orderId } = parsePath(window.location.pathname);
+      useUiStore.setState({ currentScreen: screen, viewedOrderId: orderId });
     };
     window.addEventListener('popstate', handlePopState);
     return () => window.removeEventListener('popstate', handlePopState);
-  }, [setCurrentScreen]);
+  }, []);
 
-  // Auth: nguồn dữ liệu là AuthContext (AppContext chỉ chuyển tiếp để component cũ dùng useApp vẫn chạy)
   const {
     user,
     isAuthModalOpen,
@@ -152,6 +151,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Zustand UI Store
   const currentScreen = useUiStore((s) => s.currentScreen);
+  const setCurrentScreen = useUiStore((s) => s.setCurrentScreen);
   const appViewMode = useUiStore((s) => s.appViewMode);
   const setAppViewMode = useUiStore((s) => s.setAppViewMode);
   const deviceView = useUiStore((s) => s.deviceView);
@@ -173,6 +173,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const closeCart = useUiStore((s) => s.closeCart);
   const isPaymentFailedModalOpen = useUiStore((s) => s.isPaymentFailedModalOpen);
   const failedReason = useUiStore((s) => s.failedReason);
+  const viewedOrderId = useUiStore((s) => s.viewedOrderId);
+  const openOrderDetail = useUiStore((s) => s.openOrderDetail);
   const closePaymentFailedModal = useUiStore((s) => s.closePaymentFailedModal);
 
   // Zustand Cart Store
@@ -202,7 +204,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // TanStack Query: Products & Orders
   const { products, isLoading: isProductsLoading } = useProducts();
-  const { orders, latestOrder, createOrder, advanceOrderStatus, reOrder, cancelOrder, isCancelling } = useOrders();
+  const { orders, isLoading: isOrdersLoading, isError: isOrdersError, refetch: refetchOrders, latestOrder, createOrder, advanceOrderStatus, reOrder, cancelOrder, isCancelling } = useOrders();
   useEffect(() => {
     let active = true;
     import('../services/dich-vu-voucher').then(({ dichVuVoucher }) => {
@@ -273,6 +275,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     closePaymentFailedModal,
 
     orders,
+    isOrdersLoading,
+    isOrdersError,
+    refetchOrders: () => { void refetchOrders(); },
+    viewedOrderId,
+    openOrderDetail,
     lastCreatedOrder: latestOrder,
     failedReason,
     createOrder,

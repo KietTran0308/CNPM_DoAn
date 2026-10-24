@@ -1,7 +1,7 @@
 import React from 'react';
 import { AlertCircle } from 'lucide-react';
 
-/**Ô nhập liệu dùng chung*/
+/**Ô nhập liệu dùng chung. */
 interface AuthFieldProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'onChange'> {
   label: string;
   icon: React.ReactNode;

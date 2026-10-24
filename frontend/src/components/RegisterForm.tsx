@@ -4,8 +4,8 @@ import { useAuthContext } from '../context/AuthContext';
 import { validateEmail, validatePhoneNumber } from '../utils';
 import { AuthField } from './AuthField';
 
-export const MIN_NAME_LENGTH = 2; // khớp RegisterDto ở backend
-export const MIN_PASSWORD_LENGTH = 6; // khớp RegisterDto ở backend
+export const MIN_NAME_LENGTH = 2;
+export const MIN_PASSWORD_LENGTH = 6;
 
 export interface RegisterValues {
   fullName: string;
@@ -17,7 +17,7 @@ export interface RegisterValues {
 
 export type RegisterErrors = Partial<Record<keyof RegisterValues, string>>;
 
-/**Kiểm tra họ tên, email, (số điện thoại nếu có), mật khẩu – trả về object rỗng nếu hợp lệ.*/
+/** Kiểm tra họ tên, email, (số điện thoại nếu có), mật khẩu – trả về object rỗng nếu hợp lệ. */
 export const validateRegister = (v: RegisterValues): RegisterErrors => {
   const errors: RegisterErrors = {};
 

@@ -17,6 +17,10 @@ export interface TrangThaiTaiKhoan {
   isLoading: boolean;
   isAuthModalOpen: boolean;
   authModalTab: 'login' | 'register';
+  /** false cho tới khi initAuth() xong → UI biết đang "kiểm tra phiên đăng nhập" thay vì coi là khách. */
+  isInitialized: boolean;
+  /** Thông báo hiển thị trên AuthModal (vd. phiên hết hạn). */
+  authNotice: string | null;
 
   // Điều khiển Modal
   openAuthModal: (tab?: 'login' | 'register') => void;
@@ -27,6 +31,9 @@ export interface TrangThaiTaiKhoan {
   login: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
   register: (name: string, email: string, pass: string, phone?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
+  /** Backend báo 401 khi đang đăng nhập → đăng xuất, mở form đăng nhập kèm thông báo. */
+  expireSession: () => void;
+  clearAuthNotice: () => void;
   updateUser: (patch: Partial<User>) => Promise<void>;
   setUser: (user: User) => void;
   redeemPoints: (points: number) => Promise<{ success: boolean; message: string; remainingPoints?: number; voucherCode?: string }>;
@@ -49,20 +56,34 @@ export const useTaiKhoanStore = create<TrangThaiTaiKhoan>((set, get) => ({
   isLoading: false,
   isAuthModalOpen: false,
   authModalTab: 'login',
+  isInitialized: false,
+  authNotice: null,
 
   openAuthModal: (tab = 'login') => {
     set({ authModalTab: tab, isAuthModalOpen: true });
   },
 
   closeAuthModal: () => {
-    set({ isAuthModalOpen: false });
+    set({ isAuthModalOpen: false, authNotice: null });
+  },
+
+  clearAuthNotice: () => set({ authNotice: null }),
+
+  expireSession: () => {
+    if (!get().user) return;
+    get().logout();
+    set({
+      authNotice: 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.',
+      authModalTab: 'login',
+      isAuthModalOpen: true,
+    });
   },
 
   // Khôi phục phiên làm việc thực tế từ JWT token nếu có
   initAuth: async () => {
     const token = tokenStorage.get();
     if (!token) {
-      set({ user: null, isLoading: false });
+      set({ user: null, isLoading: false, isInitialized: true });
       return;
     }
 
@@ -70,14 +91,14 @@ export const useTaiKhoanStore = create<TrangThaiTaiKhoan>((set, get) => ({
       set({ isLoading: true });
       const res = await authApi.getMe();
       if (res && res.user) {
-        set({ user: res.user, isLoading: false });
+        set({ user: res.user, isLoading: false, isInitialized: true });
       } else {
         tokenStorage.remove();
-        set({ user: null, isLoading: false });
+        set({ user: null, isLoading: false, isInitialized: true });
       }
     } catch {
       tokenStorage.remove();
-      set({ user: null, isLoading: false });
+      set({ user: null, isLoading: false, isInitialized: true });
     }
   },
 
@@ -90,7 +111,7 @@ export const useTaiKhoanStore = create<TrangThaiTaiKhoan>((set, get) => ({
     try {
       set({ isLoading: true });
       const res = await authApi.login({ email, password: pass });
-      set({ user: res.user, isAuthModalOpen: false, isLoading: false });
+      set({ user: res.user, isAuthModalOpen: false, isLoading: false, authNotice: null });
       return { success: true };
     } catch (err: any) {
       set({ isLoading: false });

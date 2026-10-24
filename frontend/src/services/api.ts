@@ -11,6 +11,7 @@ import {DEFAULT_BRANCHES, DEFAULT_VOUCHERS, SIZES, TOPPINGS} from '../constants'
 import {request, USE_MOCK_API} from './http';
 
 export {USE_MOCK_API, tokenStorage, request} from './http';
+// authApi (đăng ký / đăng nhập / hồ sơ) đã được tách sang ./auth.api; re-export để code cũ không vỡ.
 export {authApi} from './auth.api';
 
 export function mapProductFromBackend(p: Record<string, any>): Product {
@@ -42,7 +43,19 @@ export const menuApi = {
     getById: async (id: string) => mapProductFromBackend(await request<any>(`/products/${encodeURIComponent(id)}`)),
 };
 
+/** Thanh toán thất bại nhưng đơn đã được tạo (PAYMENT_FAILED) – mang theo đơn để hiện màn xác nhận. */
+export class PaymentFailedError extends Error {
+    order: Order;
+
+    constructor(message: string, order: Order) {
+        super(message);
+        this.name = 'PaymentFailedError';
+        this.order = order;
+    }
+}
+
 function mapOrder(raw: any): Order {
+    // Database dùng orderItems, không phải items của bản mock cũ.
     if (raw.orderNumber && raw.items?.[0]?.product?.basePrice !== undefined) return raw as Order;
     const rows = raw.orderItems ?? raw.items ?? [];
     const items: CartItem[] = rows.map((it: any) => {
@@ -51,7 +64,7 @@ function mapOrder(raw: any): Order {
         });
         const qty = Number(it.qty) || 1;
         const size = SIZES.find(s => s.id === it.size) ?? SIZES[0];
-        //Relation Prisma: [{topping: {code: 't1', ...}, price: ...}]
+        // Relation Prisma: [{topping: {code: 't1', ...}, price: ...}]
         const selected = (Array.isArray(it.toppings) ? it.toppings : [])
             .map((row: any) => TOPPINGS.find(t => t.id === (row.topping?.code ?? row.code)))
             .filter((t: any): t is typeof TOPPINGS[number] => Boolean(t));
@@ -102,24 +115,39 @@ interface CheckoutPayload {
 }
 
 export const orderApi = {
+    /** GET /orders/me – đơn của tài khoản đang đăng nhập (backend lọc theo JWT). */
     getOrders: async () => (await request<any[]>('/orders/me')).map(mapOrder),
+    /** GET /orders/:id – một đơn của chính tài khoản (404 nếu không phải đơn của mình). */
+    getOrder: async (orderId: string) => mapOrder(await request<any>(`/orders/${encodeURIComponent(orderId)}`)),
+    /** Thanh toán lại một đơn PAYMENT_FAILED (cùng đơn, key idempotency mới). */
+    retryPayment: async (orderId: string, paymentMethod: PaymentMethodId) => {
+        const method = paymentMethod === 'card' ? 'CARD' : 'WALLET';
+        return request<{ order: any }>('/payments', {
+            method: 'POST',
+            headers: {'Idempotency-Key': `retry-${orderId}-${Date.now()}`},
+            body: JSON.stringify({orderId, method})
+        });
+    },
     createOrder: async (payload: CheckoutPayload, simulateFailure = false) => {
         if (USE_MOCK_API) {
             const created = await request<{ message: string; order: Order }>('/orders', {
                 method: 'POST',
                 body: JSON.stringify(payload)
             });
-            const paid = await request<{ message: string; order: Order }>('/payments', {
-                method: 'POST',
-                headers: {'Idempotency-Key': `pay-${created.order.id}`},
-                body: JSON.stringify({
-                    orderId: created.order.id,
-                    amount: payload.total,
-                    method: payload.paymentMethod,
-                    simulateFailure
-                })
-            });
-            return paid;
+            try {
+                return await request<{ message: string; order: Order }>('/payments', {
+                    method: 'POST',
+                    headers: {'Idempotency-Key': `pay-${created.order.id}`},
+                    body: JSON.stringify({
+                        orderId: created.order.id,
+                        amount: payload.total,
+                        method: payload.paymentMethod,
+                        simulateFailure
+                    })
+                });
+            } catch (e: any) {
+                throw new PaymentFailedError(e?.message || 'Thanh toán không thành công.', {...created.order, status: 'PAYMENT_FAILED'});
+            }
         }
         const created = await request<any>('/orders', {
             method: 'POST', body: JSON.stringify({
@@ -138,7 +166,10 @@ export const orderApi = {
             body: JSON.stringify({orderId: created.id, method, simulateFailure})
         });
         if (paid.order.status !== 'PAID') {
-            throw new Error('Thanh toán không thành công, giỏ hàng được giữ nguyên.');
+            throw new PaymentFailedError(
+                'Thanh toán không thành công, giỏ hàng được giữ nguyên.',
+                mapOrder({ ...created, ...paid.order, orderItems: created.orderItems, payments: [{ method, status: 'FAILED' }] })
+            );
         }
         return {
             order: mapOrder({ ...created, ...paid.order, orderItems: created.orderItems, payments: [{ method, status: 'SUCCESS' }] }),
