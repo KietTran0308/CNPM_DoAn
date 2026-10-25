@@ -1,5 +1,6 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
+import { useAuthContext } from '../context/AuthContext';
 import { useChiTietDonHang } from '../hooks/dung-don-hang';
 import { USE_MOCK_API } from '../services/http';
 import { formatCurrency, formatDateTime, getStatusBadgeConfig } from '../utils';
@@ -56,6 +57,7 @@ const Notice: React.FC<{
 
 export const OrderConfirmationPage: React.FC = () => {
   const { viewedOrderId, lastCreatedOrder, user, openAuthModal, setCurrentScreen, advanceOrderStatus } = useApp();
+  const { user: currentUser } = useAuthContext();
 
   // Đơn đang xem: lấy từ URL /orders/:id; nếu vào màn này sau khi thanh toán thì là đơn vừa tạo.
   const orderId = viewedOrderId ?? lastCreatedOrder?.id ?? null;
@@ -71,6 +73,16 @@ export const OrderConfirmationPage: React.FC = () => {
     const timer = setTimeout(() => advanceOrderStatus(order.id), delay);
     return () => clearTimeout(timer);
   }, [order?.id, order?.status, advanceOrderStatus]);
+
+  // Đang kiểm tra JWT đã lưu: chưa kết luận là "khách" để không nháy màn yêu cầu đăng nhập.
+  if (!isInitialized) {
+    return (
+      <div role="status" className="py-16 flex flex-col items-center gap-2 text-[#035542]">
+        <Loader2 className="w-6 h-6 animate-spin" />
+        <span className="text-xs font-bold uppercase">Đang kiểm tra phiên đăng nhập...</span>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
@@ -114,10 +126,14 @@ export const OrderConfirmationPage: React.FC = () => {
         icon={<AlertCircle className="w-7 h-7" />}
         title="Không tìm thấy đơn hàng"
         text={isError ? 'Không tải được đơn. Kiểm tra kết nối rồi thử lại.' : 'Đơn không tồn tại hoặc không thuộc tài khoản của bạn.'}
-        actions={[
-          { label: 'Lịch sử đơn', onClick: () => setCurrentScreen('orders') },
-          { label: 'Thử lại', onClick: () => void refetch(), primary: true },
-        ]}
+        actions={
+          isError
+            ? [
+                { label: 'Lịch sử đơn', onClick: () => setCurrentScreen('orders') },
+                { label: 'Thử lại', onClick: () => void refetch(), primary: true },
+              ]
+            : [{ label: 'Về lịch sử đơn', onClick: () => setCurrentScreen('orders'), primary: true }]
+        }
       />
     );
   }
@@ -134,6 +150,13 @@ export const OrderConfirmationPage: React.FC = () => {
 
   return (
     <Shell>
+      {isError && (
+        <div role="alert" className="mb-3 p-3 rounded-[14px] bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span className="flex-1">Không cập nhật được trạng thái mới nhất của đơn.</span>
+          <button type="button" onClick={() => void refetch()} className="underline font-bold cursor-pointer">Thử lại</button>
+        </div>
+      )}
       {PAID_FLOW.includes(order.status) ? (
         <SuccessView order={order} onMenu={() => setCurrentScreen('menu')} onHistory={() => setCurrentScreen('orders')} />
       ) : order.status === 'PAYMENT_FAILED' ? (

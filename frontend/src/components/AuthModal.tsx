@@ -10,6 +10,16 @@ export const AuthModal: React.FC = () => {
   const { isAuthModalOpen, closeAuthModal, authModalTab, openAuthModal, user, logout, isInitialized, authNotice } = useAuthContext();
   const { setCurrentScreen } = useApp();
 
+  
+  useEffect(() => {
+    if (!isAuthModalOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeAuthModal();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isAuthModalOpen, closeAuthModal]);
+
   if (!isAuthModalOpen) return null;
 
   const tabClass = (tab: 'login' | 'register') =>
@@ -21,7 +31,11 @@ export const AuthModal: React.FC = () => {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-[var(--backdrop-blur-glass)] animate-in fade-in duration-200">
       <div className="fixed inset-0" onClick={closeAuthModal} />
 
-      <div className="relative z-10 w-full max-w-md liquid-glass liquid-glass-modal rounded-[20px] border border-white/90 shadow-2xl overflow-hidden bg-white/90">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={user ? 'Tài khoản' : authModalTab === 'login' ? 'Đăng nhập' : 'Đăng ký'}
+        className="relative z-10 w-full max-w-md max-h-[calc(100dvh-2rem)] overflow-y-auto liquid-glass liquid-glass-modal rounded-[20px] border border-white/90 shadow-2xl bg-white/90">
         {/* Header */}
         <div className="p-5 border-b border-black/5 flex items-center justify-between bg-white/70 backdrop-blur-[var(--backdrop-blur-glass)]">
           <div className="flex items-center gap-2.5">
@@ -66,6 +80,16 @@ export const AuthModal: React.FC = () => {
                 type="button"
                 onClick={() => {
                   closeAuthModal();
+                  setCurrentScreen('orders');
+                }}
+                className="flex-1 py-3 px-4 rounded-full liquid-glass border border-emerald-900/20 text-[#035542] font-bold text-xs cursor-pointer hover:bg-white shadow-xs text-center transition-all"
+              >
+                LỊCH SỬ ĐƠN HÀNG
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  closeAuthModal();
                   setCurrentScreen('account');
                 }}
                 className="flex-1 py-3 px-4 rounded-full bg-[#145C4B] hover:bg-[#035542] text-white font-bold text-xs cursor-pointer hover:brightness-105 shadow-sm text-center transition-all"
@@ -100,7 +124,7 @@ export const AuthModal: React.FC = () => {
               </div>
             )}
 
-            {/*key = tab*/}
+            {/* key = tab để reset state/lỗi của form khi chuyển tab */}
             {authModalTab === 'login' ? (
               <LoginForm key="login" onSuccess={closeAuthModal} onSwitchToRegister={() => openAuthModal('register')} />
             ) : (

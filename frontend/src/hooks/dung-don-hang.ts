@@ -44,6 +44,7 @@ export const useDungDonHang = () => {
     const {
         data: orders = [],
         isLoading,
+        isFetching,
         isError,
         refetch,
     } = useQuery<Order[]>({
@@ -220,6 +221,7 @@ export const useDungDonHang = () => {
     return {
         orders,
         isLoading,
+        isFetching,
         isError,
         refetch,
         createOrder,

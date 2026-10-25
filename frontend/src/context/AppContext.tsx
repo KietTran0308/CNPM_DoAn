@@ -95,6 +95,7 @@ export interface AppContextType {
   // Orders (TanStack Query + Server State: orderService)
   orders: Order[];
   isOrdersLoading: boolean;
+  isOrdersFetching: boolean;
   isOrdersError: boolean;
   refetchOrders: () => void;
   /** Id đơn đang xem ở màn xác nhận (URL /orders/:id) */
@@ -137,6 +138,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
+  // Auth: nguồn dữ liệu là AuthContext (AppContext chỉ chuyển tiếp để component cũ dùng useApp vẫn chạy)
   const {
     user,
     isAuthModalOpen,
@@ -204,7 +206,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // TanStack Query: Products & Orders
   const { products, isLoading: isProductsLoading } = useProducts();
-  const { orders, isLoading: isOrdersLoading, isError: isOrdersError, refetch: refetchOrders, latestOrder, createOrder, advanceOrderStatus, reOrder, cancelOrder, isCancelling } = useOrders();
+  const { orders, isLoading: isOrdersLoading, isFetching: isOrdersFetching, isError: isOrdersError, refetch: refetchOrders, latestOrder, createOrder, advanceOrderStatus, reOrder, cancelOrder, isCancelling } = useOrders();
   useEffect(() => {
     let active = true;
     import('../services/dich-vu-voucher').then(({ dichVuVoucher }) => {
@@ -276,6 +278,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     orders,
     isOrdersLoading,
+    isOrdersFetching,
     isOrdersError,
     refetchOrders: () => { void refetchOrders(); },
     viewedOrderId,

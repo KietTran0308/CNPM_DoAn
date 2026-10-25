@@ -48,9 +48,14 @@ export const dichVuDonHang = {
   async layChiTietDonHang(orderId: string): Promise<Order | null> {
     try {
       return await orderApi.getOrder(orderId); // GET /orders/:id
-    } catch {
+    } catch (err) {
       // Dự phòng: tìm trong danh sách đơn của tài khoản (vd. tra theo orderNumber).
-      const list = await this.layDanhSachDonHang().catch(() => [] as Order[]);
+      let list: Order[];
+      try {
+        list = await this.layDanhSachDonHang();
+      } catch {
+        throw err; // cả hai đều lỗi → báo lỗi API thật (khác với "không tìm thấy đơn")
+      }
       return list.find((o) => o.id === orderId || o.orderNumber === orderId) || null;
     }
   },

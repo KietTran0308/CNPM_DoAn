@@ -4,10 +4,13 @@
  */
 import {mockRequest} from '../mocks/request';
 
-/** Chỉ bật khi muốn thử giao diện không cần chạy NestJS/PostgreSQL. */
 /** Sự kiện phát ra khi backend trả 401 cho một phiên đang đăng nhập. */
 export const AUTH_EXPIRED_EVENT = 'brewlite:auth-expired';
 
+/** Quá thời gian này mà backend chưa trả lời thì báo lỗi, tránh màn hình quay mãi. */
+const REQUEST_TIMEOUT_MS = 15000;
+
+/** Chỉ bật khi muốn thử giao diện không cần chạy NestJS/PostgreSQL. */
 export const USE_MOCK_API = process.env.NEXT_PUBLIC_USE_MOCK_API === 'true';
 const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 const TOKEN_KEY = 'brewlite_auth_token';
@@ -28,10 +31,15 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
     const token = tokenStorage.get();
     if (token) headers.set('Authorization', `Bearer ${token}`);
     let response: Response;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
-        response = await fetch(`${BASE_URL}${path}`, {...options, headers, cache: 'no-store'});
-    } catch {
+        response = await fetch(`${BASE_URL}${path}`, {...options, headers, cache: 'no-store', signal: controller.signal});
+    } catch (e: any) {
+        if (e?.name === 'AbortError') throw new Error('Máy chủ phản hồi quá chậm. Vui lòng thử lại sau.');
         throw new Error('Không kết nối được NestJS. Kiểm tra http://localhost:4000/health hoặc bật NEXT_PUBLIC_USE_MOCK_API=true để thử frontend.');
+    } finally {
+        clearTimeout(timer);
     }
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
