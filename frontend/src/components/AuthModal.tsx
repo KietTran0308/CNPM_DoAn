@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, ShieldCheck, LogOut } from 'lucide-react';
+import { X, ShieldCheck, LogOut, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuthContext } from '../context/AuthContext';
 import { useApp } from '../context/AppContext';
 import { HartzlerWordmark } from './HartzlerBrand';
@@ -7,7 +7,7 @@ import { LoginForm } from './LoginForm';
 import { RegisterForm } from './RegisterForm';
 
 export const AuthModal: React.FC = () => {
-  const { isAuthModalOpen, closeAuthModal, authModalTab, openAuthModal, user, logout } = useAuthContext();
+  const { isAuthModalOpen, closeAuthModal, authModalTab, openAuthModal, user, logout, isInitialized, authNotice } = useAuthContext();
   const { setCurrentScreen } = useApp();
 
   if (!isAuthModalOpen) return null;
@@ -36,7 +36,12 @@ export const AuthModal: React.FC = () => {
           </button>
         </div>
 
-        {user ? (
+        {!isInitialized ? (
+          <div role="status" className="p-8 flex flex-col items-center gap-2 text-[#145C4B]">
+            <Loader2 className="w-6 h-6 animate-spin" />
+            <span className="text-xs font-bold uppercase">Đang kiểm tra phiên đăng nhập...</span>
+          </div>
+        ) : user ? (
           <div className="p-6 space-y-4">
             <div className="flex items-center gap-3 p-4 rounded-[16px] bg-white/70 border border-white/80 shadow-xs">
               <div className="w-11 h-11 rounded-full bg-[#145C4B] text-white font-bold text-sm flex items-center justify-center shadow-xs">
@@ -47,7 +52,7 @@ export const AuthModal: React.FC = () => {
                 <p className="text-xs text-[#333333]/70 font-mono truncate">{user.email}</p>
                 <div className="flex items-center gap-2 mt-1">
                   <span className="inline-flex items-center gap-1 text-[10px] font-mono font-bold text-[#145C4B] bg-emerald-900/10 px-2 py-0.5 rounded-full">
-                    <ShieldCheck className="w-3 h-3 text-[#145C4B]" /> ĐÃ XÁC THỰC SQL
+                    <ShieldCheck className="w-3 h-3 text-[#145C4B]" /> ĐÃ ĐĂNG NHẬP{user.role === 'admin' ? ' • QUẢN TRỊ' : user.role === 'barista' ? ' • NHÂN VIÊN' : ''}
                   </span>
                   <span className="text-[10px] font-bold text-[#145C4B]">
                     Hạng: {user.membershipTier || 'Standard'} ({user.loyaltyPoints || 0}đ)
@@ -78,7 +83,7 @@ export const AuthModal: React.FC = () => {
           </div>
         ) : (
           <div className="p-6">
-            {/*Chuyển đổi Đăng nhập/Đăng ký*/}
+            {/* Chuyển đổi Đăng nhập / Đăng ký */}
             <div className="flex rounded-full bg-stone-100 p-1 mb-5 border border-black/5">
               <button type="button" onClick={() => openAuthModal('login')} className={tabClass('login')}>
                 ĐĂNG NHẬP
@@ -88,7 +93,14 @@ export const AuthModal: React.FC = () => {
               </button>
             </div>
 
-            {/*key = tab để reset state/lỗi của form khi chuyển tab*/}
+            {authNotice && (
+              <div role="alert" className="mb-4 p-3 rounded-[12px] bg-amber-50 border border-amber-200 text-amber-900 text-xs font-semibold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{authNotice}</span>
+              </div>
+            )}
+
+            {/*key = tab*/}
             {authModalTab === 'login' ? (
               <LoginForm key="login" onSuccess={closeAuthModal} onSwitchToRegister={() => openAuthModal('register')} />
             ) : (

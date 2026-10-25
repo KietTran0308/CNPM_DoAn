@@ -1,3 +1,10 @@
+/**
+ * =====================================================================
+ * AUTH API – các hàm gọi Backend cho đăng ký / đăng nhập / hồ sơ
+ * =====================================================================
+ * File này CHỈ gọi API và map dữ liệu. Không validate form (việc của
+ * LoginForm / RegisterForm) và không giữ state (việc của AuthContext).
+ */
 import type {
     User,
     UpdateUserProfilePayload,
@@ -23,6 +30,7 @@ export interface AuthResponse {
     message: string;
 }
 
+/** Chuẩn hoá user từ backend (role, hạng thành viên...) về kiểu User của frontend. */
 export function mapUser(data: any): User {
     const u = data.user || data;
     return {
@@ -35,7 +43,7 @@ export function mapUser(data: any): User {
 }
 
 export const authApi = {
-    /**POST /auth/register – tạo tài khoản, lưu JWT.*/
+    /** POST /auth/register – tạo tài khoản, lưu JWT. */
     register: async (payload: RegisterPayload): Promise<AuthResponse> => {
         const res = await request<{ user: User; token: string }>('/auth/register', {
             method: 'POST',
@@ -45,7 +53,7 @@ export const authApi = {
         return {...res, user: mapUser(res.user), message: 'Đăng ký thành công'};
     },
 
-    /**POST /auth/login – đăng nhập, lưu JWT.*/
+    /** POST /auth/login – đăng nhập, lưu JWT. */
     login: async (payload: LoginPayload): Promise<AuthResponse> => {
         const res = await request<{ user: User; token: string }>('/auth/login', {
             method: 'POST',
@@ -55,10 +63,10 @@ export const authApi = {
         return {...res, user: mapUser(res.user), message: 'Đăng nhập thành công'};
     },
 
-    /**Xoá JWT khỏi máy.*/
+    /** Xoá JWT khỏi máy (backend dùng JWT stateless nên không cần gọi server). */
     logout: () => tokenStorage.remove(),
 
-    /**GET /auth/me – khôi phục phiên đăng nhập từ JWT.*/
+    /** GET /auth/me – khôi phục phiên đăng nhập từ JWT. */
     getMe: async () => ({user: mapUser(await request<any>('/auth/me'))}),
 
     updateProfile: async (payload: UpdateUserProfilePayload) => ({
