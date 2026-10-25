@@ -1,7 +1,7 @@
 // frontend/src/components/CartDrawer.tsx
 import React from 'react';
 import { useCart } from '../context/CartContext';
-import { CartItem } from '../types';
+import { CartItem } from '../types/cart';
 
 interface CartDrawerProps {
   onCheckout?: () => void;
@@ -27,11 +27,12 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onCheckout }) => {
     new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
+    <div className="fixed inset-0 z-50 flex justify-end" role="dialog" aria-modal="true" aria-label="Giỏ hàng">
       {/* Lớp nền mờ */}
-      <div 
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity" 
-        onClick={closeCart} 
+      <div
+        data-testid="cart-backdrop"
+        className="fixed inset-0 bg-black/40 backdrop-blur-sm transition-opacity"
+        onClick={closeCart}
       />
 
       {/* Drawer Container */}
@@ -42,6 +43,7 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onCheckout }) => {
             Giỏ hàng <span className="text-sm font-normal text-gray-500">({cartCount} món)</span>
           </h2>
           <button
+            type="button"
             onClick={closeCart}
             className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
             aria-label="Đóng giỏ hàng"
@@ -58,11 +60,13 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onCheckout }) => {
             </div>
           ) : (
             cart.map((item: CartItem) => (
-              <div key={item.cartItemId} className="py-4">
+              <div key={item.cartItemId} className="py-4" data-testid={`cart-item-${item.cartItemId}`}>
                 {/* 1. Tên món & Nút xoá */}
                 <div className="flex items-start justify-between">
                   <h3 className="font-semibold text-gray-900">{item.name}</h3>
                   <button
+                    type="button"
+                    aria-label={`Xoá ${item.name}`}
                     onClick={() => removeFromCart(item.cartItemId)}
                     className="text-xs text-red-500 hover:underline"
                   >
@@ -89,16 +93,23 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onCheckout }) => {
                   {/* Bộ điều khiển số lượng */}
                   <div className="flex items-center rounded border border-gray-300">
                     <button
+                      type="button"
+                      aria-label={`Giảm số lượng ${item.name}`}
                       onClick={() => updateQuantity(item.cartItemId, -1)}
                       disabled={item.quantity <= 1}
                       className="h-7 w-7 text-gray-600 hover:bg-gray-100 disabled:opacity-40"
                     >
                       -
                     </button>
-                    <span className="w-8 text-center text-sm font-semibold text-gray-800">
+                    <span
+                      data-testid={`quantity-${item.cartItemId}`}
+                      className="w-8 text-center text-sm font-semibold text-gray-800"
+                    >
                       {item.quantity}
                     </span>
                     <button
+                      type="button"
+                      aria-label={`Tăng số lượng ${item.name}`}
                       onClick={() => updateQuantity(item.cartItemId, 1)}
                       className="h-7 w-7 text-gray-600 hover:bg-gray-100"
                     >
@@ -108,7 +119,10 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onCheckout }) => {
 
                   {/* Giá từng món = (đơn giá + option) * số lượng */}
                   <div className="text-right">
-                    <span className="text-sm font-bold text-amber-700">
+                    <span
+                      data-testid={`item-total-${item.cartItemId}`}
+                      className="text-sm font-bold text-amber-700"
+                    >
                       {formatVND(item.totalPrice)}
                     </span>
                   </div>
@@ -124,31 +138,36 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onCheckout }) => {
             <div className="space-y-1.5 text-sm">
               <div className="flex justify-between text-gray-600">
                 <span>Tạm tính</span>
-                <span className="font-medium">{formatVND(cartSubtotal)}</span>
+                <span data-testid="cart-subtotal" className="font-medium">
+                  {formatVND(cartSubtotal)}
+                </span>
               </div>
 
               {discount > 0 && (
                 <div className="flex justify-between text-green-600">
                   <span>Giảm giá voucher</span>
-                  <span>-{formatVND(discount)}</span>
+                  <span data-testid="cart-discount">-{formatVND(discount)}</span>
                 </div>
               )}
 
               {pointsDiscount > 0 && (
                 <div className="flex justify-between text-green-600">
                   <span>Điểm thưởng</span>
-                  <span>-{formatVND(pointsDiscount)}</span>
+                  <span data-testid="cart-points-discount">-{formatVND(pointsDiscount)}</span>
                 </div>
               )}
 
               {/* Tổng tiền cuối cùng */}
               <div className="flex items-center justify-between border-t border-gray-200 pt-2 text-base font-bold text-gray-900">
                 <span>Tổng tiền:</span>
-                <span className="text-lg text-amber-600">{formatVND(cartTotal)}</span>
+                <span data-testid="cart-total" className="text-lg text-amber-600">
+                  {formatVND(maxZero(cartTotal))}
+                </span>
               </div>
             </div>
 
             <button
+              type="button"
               onClick={() => {
                 closeCart();
                 onCheckout?.();
@@ -163,3 +182,9 @@ export const CartDrawer: React.FC<CartDrawerProps> = ({ onCheckout }) => {
     </div>
   );
 };
+
+function maxZero(val: number): number {
+  return Math.max(0, val);
+}
+
+export default CartDrawer;

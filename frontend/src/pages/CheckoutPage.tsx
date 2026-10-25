@@ -61,11 +61,13 @@ export const CheckoutPage: React.FC = () => {
   const [customerPhone, setCustomerPhone] = useState('');
   const [orderNote, setOrderNote] = useState('');
   const [selectedPayment, setSelectedPayment] = useState<PaymentMethod>('momo');
-  
+
   // Quản lý trạng thái khóa nút đặt hàng
   const [isSubmitting, setIsSubmitting] = useState(false);
   const isSubmittingRef = useRef(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const safeTotal = Math.max(0, cartTotal);
 
   const formatVND = (amount: number) =>
     new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
@@ -77,6 +79,14 @@ export const CheckoutPage: React.FC = () => {
     if (isSubmittingRef.current || isSubmitting) return;
     if (cart.length === 0) return;
 
+    const trimmedName = customerName.trim();
+    const trimmedPhone = customerPhone.trim();
+
+    if (!trimmedName || !/^[0-9]{10,11}$/.test(trimmedPhone)) {
+      setErrorMessage('Vui lòng nhập đầy đủ họ tên và số điện thoại hợp lệ (10-11 chữ số).');
+      return;
+    }
+
     isSubmittingRef.current = true;
     setIsSubmitting(true);
     setErrorMessage(null);
@@ -85,8 +95,8 @@ export const CheckoutPage: React.FC = () => {
       // 2. Chuẩn bị payload đơn hàng
       const orderPayload: CreateOrderPayload = {
         customer: {
-          name: customerName.trim(),
-          phone: customerPhone.trim(),
+          name: trimmedName,
+          phone: trimmedPhone,
         },
         pickup: {
           branch: pickupBranch || 'Chi nhánh mặc định',
@@ -108,7 +118,7 @@ export const CheckoutPage: React.FC = () => {
         subtotal: cartSubtotal,
         discount,
         pointsDiscount,
-        total: cartTotal,
+        total: safeTotal,
         voucherCode: voucherCode || undefined,
         orderNote: orderNote.trim(),
       };
@@ -119,15 +129,14 @@ export const CheckoutPage: React.FC = () => {
       // Gọi API POST /payments
       const paymentResult = await processPaymentApi({
         orderId: orderResult.id,
-        amount: cartTotal,
+        amount: safeTotal,
         method: selectedPayment,
         returnUrl: `${window.location.origin}/orders/${orderResult.id}/complete`,
       });
 
       // 3. Phân luồng điều hướng thành công:
       if (paymentResult.paymentUrl) {
-        // Lưu ý: Không clear giỏ hàng ở đây nếu cổng thanh toán bên thứ ba có khả năng thất bại/hủy.
-        // Giữ giỏ hàng, chỉ dọn giỏ hàng tại trang returnUrl khi backend xác nhận webhook thành công.
+        // Giữ giỏ hàng nếu chuyển sang cổng thanh toán thứ 3 để phòng hờ huỷ/lỗi giao dịch
         window.location.href = paymentResult.paymentUrl;
       } else {
         // Đơn COD thành công -> xóa giỏ hàng và chuyển trang xác nhận
@@ -137,7 +146,8 @@ export const CheckoutPage: React.FC = () => {
     } catch (err: any) {
       // 4. Khi gặp lỗi: GIỮ NGUYÊN GIỎ HÀNG, mở khóa nút đặt hàng để user thử lại
       setErrorMessage(
-        err.message || 'Thanh toán không thành công. Giỏ hàng của bạn vẫn được giữ nguyên, vui lòng thử lại.'
+        err?.message ||
+          'Thanh toán không thành công. Giỏ hàng của bạn vẫn được giữ nguyên, vui lòng thử lại.'
       );
       isSubmittingRef.current = false;
       setIsSubmitting(false);
@@ -175,7 +185,11 @@ export const CheckoutPage: React.FC = () => {
 
         {/* Thông báo lỗi & giữ giỏ hàng */}
         {errorMessage && (
-          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 flex items-start justify-between">
+          <div
+            role="alert"
+            data-testid="checkout-error"
+            className="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 flex items-start justify-between"
+          >
             <div className="flex gap-2">
               <span className="font-bold">⚠️</span>
               <div>
@@ -185,6 +199,7 @@ export const CheckoutPage: React.FC = () => {
             </div>
             <button
               type="button"
+              aria-label="Đóng thông báo lỗi"
               onClick={() => setErrorMessage(null)}
               className="text-red-500 hover:text-red-700 font-bold ml-4"
             >
@@ -203,10 +218,14 @@ export const CheckoutPage: React.FC = () => {
                 </h2>
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    <label
+                      htmlFor="customer-name"
+                      className="block text-xs font-semibold text-gray-700 mb-1"
+                    >
                       Họ và tên *
                     </label>
                     <input
+                      id="customer-name"
                       type="text"
                       required
                       disabled={isSubmitting}
@@ -217,10 +236,14 @@ export const CheckoutPage: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    <label
+                      htmlFor="customer-phone"
+                      className="block text-xs font-semibold text-gray-700 mb-1"
+                    >
                       Số điện thoại *
                     </label>
                     <input
+                      id="customer-phone"
                       type="tel"
                       required
                       disabled={isSubmitting}
@@ -232,10 +255,14 @@ export const CheckoutPage: React.FC = () => {
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    <label
+                      htmlFor="order-note"
+                      className="block text-xs font-semibold text-gray-700 mb-1"
+                    >
                       Ghi chú đơn hàng
                     </label>
                     <textarea
+                      id="order-note"
                       rows={2}
                       disabled={isSubmitting}
                       value={orderNote}
@@ -321,7 +348,8 @@ export const CheckoutPage: React.FC = () => {
                           </span>
                         </div>
                         <p className="text-xs text-gray-500 mt-0.5">
-                          Size: {item.size.name} • SL: <span className="font-semibold text-gray-700">x{item.quantity}</span>
+                          Size: {item.size.name} • SL:{' '}
+                          <span className="font-semibold text-gray-700">x{item.quantity}</span>
                         </p>
                         {item.toppings.length > 0 && (
                           <p className="text-xs text-gray-500 truncate">
@@ -340,20 +368,22 @@ export const CheckoutPage: React.FC = () => {
                 <div className="border-t border-gray-100 mt-4 pt-4 space-y-2 text-sm">
                   <div className="flex justify-between text-gray-600">
                     <span>Tạm tính</span>
-                    <span className="font-medium text-gray-900">{formatVND(cartSubtotal)}</span>
+                    <span data-testid="checkout-subtotal" className="font-medium text-gray-900">
+                      {formatVND(cartSubtotal)}
+                    </span>
                   </div>
 
                   {discount > 0 && (
                     <div className="flex justify-between text-green-600">
                       <span>Mã ưu đãi</span>
-                      <span>-{formatVND(discount)}</span>
+                      <span data-testid="checkout-discount">-{formatVND(discount)}</span>
                     </div>
                   )}
 
                   {pointsDiscount > 0 && (
                     <div className="flex justify-between text-green-600">
                       <span>Giảm từ điểm</span>
-                      <span>-{formatVND(pointsDiscount)}</span>
+                      <span data-testid="checkout-points-discount">-{formatVND(pointsDiscount)}</span>
                     </div>
                   )}
 
@@ -362,8 +392,11 @@ export const CheckoutPage: React.FC = () => {
                       <span className="text-base font-bold text-gray-900 block">Tổng thanh toán</span>
                       <span className="text-[11px] text-gray-400">Đã bao gồm thuế/phí</span>
                     </div>
-                    <span className="text-xl font-extrabold text-amber-600">
-                      {formatVND(cartTotal)}
+                    <span
+                      data-testid="checkout-total"
+                      className="text-xl font-extrabold text-amber-600"
+                    >
+                      {formatVND(safeTotal)}
                     </span>
                   </div>
                 </div>
@@ -403,7 +436,7 @@ export const CheckoutPage: React.FC = () => {
                       <span>Đang xử lý đơn hàng...</span>
                     </>
                   ) : (
-                    <span>Xác nhận & Đặt hàng ({formatVND(cartTotal)})</span>
+                    <span>Xác nhận & Đặt hàng ({formatVND(safeTotal)})</span>
                   )}
                 </button>
               </div>
