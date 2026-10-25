@@ -21,6 +21,8 @@ export const metadata: Metadata = {
   },
 };
 
+
+
 /**
  * Trang chủ — Entry point của ứng dụng.
  * Menu sản phẩm được hiển thị bên trong App → MenuPage.

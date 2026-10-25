@@ -19,7 +19,14 @@ export class ProductsService {
 
   async getOptions() {
     const [sizes, toppings] = await Promise.all([
-      this.prisma.sizePrice.findMany(),
+        this.prisma.productSizePrice.findMany({
+            where: {
+                productId: id,
+            },
+            orderBy: {
+                price: 'asc',
+            },
+        });
       this.prisma.topping.findMany({
         where: { isActive: true },
         orderBy: { code: "asc" },
