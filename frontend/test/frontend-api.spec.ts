@@ -159,4 +159,48 @@ describe('Frontend API Client & Mock Fallback Tests', () => {
     // Thử chuyển đổi sai quy tắc qua api.transitionOrderStatus sẽ ném lỗi
     await expect(api.transitionOrderStatus('1041', 'PREPARING')).rejects.toThrow('Lỗi State Machine');
   });
+
+  test('Zustand useCartStore: Quản lý giỏ hàng, tăng/giảm số lượng, áp mã giảm giá và tính toán bền vững', async () => {
+    const { useCartStore } = await import('../src/store/useCartStore');
+
+    // Khởi tạo rỗng
+    useCartStore.getState().clearCart();
+    expect(useCartStore.getState().cartLines.length).toBe(0);
+
+    // Thêm món vào giỏ
+    useCartStore.getState().addToCart({
+      item: {
+        id: 'item_test_1',
+        orderId: '',
+        productId: 1,
+        size: 'M',
+        qty: 1,
+        lineTotal: 40000,
+      },
+      productName: 'Cà phê sữa',
+      toppings: ['Trân châu'],
+      sugar: '100%',
+      ice: '100%',
+      unitPrice: 40000,
+      stock: 10,
+    });
+
+    expect(useCartStore.getState().getTotalCartCount()).toBe(1);
+    expect(useCartStore.getState().getRawSubtotal()).toBe(40000);
+
+    // Tăng số lượng
+    useCartStore.getState().updateCartQty('item_test_1', 1);
+    expect(useCartStore.getState().getTotalCartCount()).toBe(2);
+    expect(useCartStore.getState().getRawSubtotal()).toBe(80000);
+
+    // Áp mã giảm giá BREW10 (-10%)
+    useCartStore.getState().applyPromo({ code: 'BREW10', discount: 8000 });
+    expect(useCartStore.getState().getDiscountAmount()).toBe(8000);
+    expect(useCartStore.getState().getTotalCartPrice()).toBe(72000);
+
+    // Dọn sạch giỏ hàng
+    useCartStore.getState().clearCart();
+    expect(useCartStore.getState().cartLines.length).toBe(0);
+    expect(useCartStore.getState().getTotalCartPrice()).toBe(0);
+  });
 });

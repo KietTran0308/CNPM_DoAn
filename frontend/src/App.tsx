@@ -31,6 +31,7 @@ import {
 } from './types';
 
 import { EditItemModal } from './components/EditItemModal';
+import { useCartStore } from './store/useCartStore';
 import { AuthScreen } from './pages/AuthScreen';
 import { MenuScreen } from './pages/MenuScreen';
 import { ProductDetailScreen } from './pages/ProductDetailScreen';
@@ -68,11 +69,24 @@ export default function App() {
   const [addingToCart, setAddingToCart] = useState(false);
   const [stockNotice, setStockNotice] = useState<string | null>(null);
 
-  // Cart State & Promo Codes (Khuyến mãi)
-  const [cartLines, setCartLines] = useState<CartLine[]>([]);
-  const [promoCodeInput, setPromoCodeInput] = useState('');
-  const [appliedPromo, setAppliedPromo] = useState<{ code: string; discount: number } | null>(null);
-  const [promoError, setPromoError] = useState<string | null>(null);
+  // Cart State (Zustand Store with localStorage persistence)
+  const cartLines = useCartStore((s) => s.cartLines);
+  const appliedPromo = useCartStore((s) => s.appliedPromo);
+  const promoCodeInput = useCartStore((s) => s.promoCodeInput);
+  const promoError = useCartStore((s) => s.promoError);
+  const setPromoCodeInput = useCartStore((s) => s.setPromoCodeInput);
+  const setPromoError = useCartStore((s) => s.setPromoError);
+  const applyPromo = useCartStore((s) => s.applyPromo);
+  const removePromo = useCartStore((s) => s.removePromo);
+  const clearCart = useCartStore((s) => s.clearCart);
+  const addLineToCart = useCartStore((s) => s.addToCart);
+  const updateLineQty = useCartStore((s) => s.updateCartQty);
+  const updateLineItem = useCartStore((s) => s.updateCartItem);
+  const removeLineItem = useCartStore((s) => s.removeCartItem);
+  const totalCartCount = useCartStore((s) => s.getTotalCartCount());
+  const rawSubtotal = useCartStore((s) => s.getRawSubtotal());
+  const discountAmount = useCartStore((s) => s.getDiscountAmount());
+  const totalCartPrice = useCartStore((s) => s.getTotalCartPrice());
 
   // Checkout State & Stock Check
   const [paymentMethod, setPaymentMethod] = useState<'wallet' | 'bank'>('wallet');
@@ -294,49 +308,29 @@ export default function App() {
     setAddingToCart(true);
 
     setTimeout(() => {
-      const toppingsKey = [...selectedToppings].sort().join(',');
       const trimmedNote = customerNote.trim();
-
-      const existingIndex = cartLines.findIndex(
-        (line) =>
-          line.item.productId === selectedProduct.id &&
-          line.item.size === selectedSize &&
-          [...line.toppings].sort().join(',') === toppingsKey &&
-          line.sugar === selectedSugar &&
-          line.ice === selectedIce &&
-          (line.note || '') === trimmedNote
-      );
-
-      if (existingIndex > -1) {
-        const updated = [...cartLines];
-        const newQty = updated[existingIndex].item.qty + 1;
-        updated[existingIndex].item.qty = newQty;
-        updated[existingIndex].item.lineTotal = updated[existingIndex].unitPrice * newQty;
-        setCartLines(updated);
-      } else {
-        const newItem: OrderItem = {
-          id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
-          orderId: '',
-          productId: selectedProduct.id,
-          size: selectedSize,
-          qty: 1,
-          lineTotal: currentUnitPrice,
-          sugar: selectedSugar,
-          ice: selectedIce,
-          note: trimmedNote || undefined,
-        };
-        const newCartLine: CartLine = {
-          item: newItem,
-          productName: selectedProduct.name,
-          toppings: selectedToppings,
-          sugar: selectedSugar,
-          ice: selectedIce,
-          note: trimmedNote || undefined,
-          unitPrice: currentUnitPrice,
-          stock: selectedProduct.stock,
-        };
-        setCartLines([...cartLines, newCartLine]);
-      }
+      const newItem: OrderItem = {
+        id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+        orderId: '',
+        productId: selectedProduct.id,
+        size: selectedSize,
+        qty: 1,
+        lineTotal: currentUnitPrice,
+        sugar: selectedSugar,
+        ice: selectedIce,
+        note: trimmedNote || undefined,
+      };
+      const newCartLine: CartLine = {
+        item: newItem,
+        productName: selectedProduct.name,
+        toppings: selectedToppings,
+        sugar: selectedSugar,
+        ice: selectedIce,
+        note: trimmedNote || undefined,
+        unitPrice: currentUnitPrice,
+        stock: selectedProduct.stock,
+      };
+      addLineToCart(newCartLine);
 
       setAddingToCart(false);
       setCurrentScreen('cart');
@@ -344,35 +338,11 @@ export default function App() {
   };
 
   const updateCartQty = (itemId: string, delta: number) => {
-    setCartLines((prev) =>
-      prev
-        .map((line) => {
-          if (line.item.id === itemId) {
-            const newQty = line.item.qty + delta;
-            if (delta > 0) {
-              const productTotal = getProductTotalInCart(line.item.productId);
-              if (productTotal + 1 > line.stock) {
-                return line;
-              }
-            }
-            if (newQty <= 0) return null;
-            return {
-              ...line,
-              item: {
-                ...line.item,
-                qty: newQty,
-                lineTotal: line.unitPrice * newQty,
-              },
-            };
-          }
-          return line;
-        })
-        .filter((line): line is CartLine => line !== null)
-    );
+    updateLineQty(itemId, delta);
   };
 
   const removeCartItem = (itemId: string) => {
-    setCartLines((prev) => prev.filter((line) => line.item.id !== itemId));
+    removeLineItem(itemId);
   };
 
   // Mở modal chỉnh sửa món trong giỏ hàng (Yêu cầu bổ sung)
@@ -403,54 +373,37 @@ export default function App() {
     const newUnitPrice = editUnitPrice;
     const newLineTotal = newUnitPrice * editQty;
 
-    setCartLines((prev) =>
-      prev.map((line) => {
-        if (line.item.id === editingItemId) {
-          return {
-            ...line,
-            item: {
-              ...line.item,
-              size: editSize,
-              lineTotal: newLineTotal,
-              sugar: editSugar,
-              ice: editIce,
-              note: editNote.trim() || undefined,
-            },
-            toppings: editToppings,
-            sugar: editSugar,
-            ice: editIce,
-            note: editNote.trim() || undefined,
-            unitPrice: newUnitPrice,
-          };
-        }
-        return line;
-      })
-    );
+    updateLineItem(editingItemId, {
+      item: {
+        id: editingItemId,
+        orderId: '',
+        productId: selectedProduct?.id || 0,
+        size: editSize,
+        qty: editQty,
+        lineTotal: newLineTotal,
+        sugar: editSugar,
+        ice: editIce,
+        note: editNote.trim() || undefined,
+      },
+      toppings: editToppings,
+      sugar: editSugar,
+      ice: editIce,
+      note: editNote.trim() || undefined,
+      unitPrice: newUnitPrice,
+    });
 
     setEditingItemId(null);
     setEditSuccessToast(true);
     setTimeout(() => setEditSuccessToast(false), 2000);
   };
 
-  const totalCartCount = cartLines.reduce((sum, line) => sum + line.item.qty, 0);
-  const rawSubtotal = cartLines.reduce((sum, line) => sum + line.item.lineTotal, 0);
-
-  // Tính toán giảm giá khuyến mãi (Task 10)
-  const discountAmount = appliedPromo
-    ? appliedPromo.code === 'BREW10'
-      ? Math.round(rawSubtotal * 0.1)
-      : Math.min(rawSubtotal, appliedPromo.discount)
-    : 0;
-
-  const totalCartPrice = Math.max(0, rawSubtotal - discountAmount);
-
   // Tự động kiểm tra điều kiện mã GIAM10K khi số lượng món trong giỏ thay đổi
   useEffect(() => {
     if (appliedPromo?.code === 'GIAM10K' && rawSubtotal < 30000 && rawSubtotal > 0) {
-      setAppliedPromo(null);
+      applyPromo(null);
       setPromoError('Mã giảm giá không hợp lệ');
     }
-  }, [rawSubtotal, appliedPromo]);
+  }, [rawSubtotal, appliedPromo, applyPromo, setPromoError]);
 
   // Xử lý áp dụng mã giảm giá
   const handleApplyPromo = (e: React.FormEvent) => {
@@ -461,10 +414,10 @@ export default function App() {
 
     if (code === 'BREW10') {
       const discount = Math.round(rawSubtotal * 0.1);
-      setAppliedPromo({ code: 'BREW10', discount });
+      applyPromo({ code: 'BREW10', discount });
     } else if (code === 'GIAM10K') {
       if (rawSubtotal >= 30000) {
-        setAppliedPromo({ code: 'GIAM10K', discount: 10000 });
+        applyPromo({ code: 'GIAM10K', discount: 10000 });
       } else {
         setPromoError('Mã giảm giá không hợp lệ');
       }
@@ -474,9 +427,7 @@ export default function App() {
   };
 
   const handleRemovePromo = () => {
-    setAppliedPromo(null);
-    setPromoCodeInput('');
-    setPromoError(null);
+    removePromo();
   };
 
   // Bank Card Input Formatter
@@ -616,9 +567,7 @@ export default function App() {
         }
 
         setLastOrder(paidOrder);
-        setCartLines([]); // Dọn sạch giỏ hàng
-        setAppliedPromo(null); // Reset khuyến mãi
-        setPromoCodeInput('');
+        clearCart(); // Dọn sạch giỏ hàng & reset khuyến mãi qua Zustand store
         setCurrentPendingOrderId(null);
         setCheckoutStatus(null);
         setCurrentScreen('success');
