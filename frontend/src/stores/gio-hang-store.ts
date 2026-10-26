@@ -72,7 +72,10 @@ const kiemTraLaiVoucher = (
         reason: `Mã ${currentCode} đã tự động hủy do giỏ hàng thấp hơn mức tối thiểu ${found.minOrder.toLocaleString('vi-VN')}đ.`,
       };
     }
-    return { voucherCode: currentCode, discount: found.discountAmount };
+    const amount = found.discountType === 'PERCENT'
+      ? Math.round(subtotal * (found.discountValue ?? 0) / 100)
+      : found.discountAmount;
+    return { voucherCode: currentCode, discount: Math.min(amount, subtotal) };
   }
 
   if (USE_MOCK_API && currentCode === 'BREWFIRST') {
@@ -228,10 +231,14 @@ export const useGioHangStore = create<TrangThaiGioHang>()(
               message: `Mã ${clean} chỉ áp dụng cho đơn từ ${found.minOrder.toLocaleString('vi-VN')}đ (tạm tính hiện tại: ${subtotal.toLocaleString('vi-VN')}đ).`,
             };
           }
-          set({ voucherCode: clean, discount: found.discountAmount });
+          const rawDiscount = found.discountType === 'PERCENT'
+            ? Math.round(subtotal * (found.discountValue ?? 0) / 100)
+            : found.discountAmount;
+          const actualDiscount = Math.min(rawDiscount, subtotal);
+          set({ voucherCode: clean, discount: actualDiscount });
           return {
             success: true,
-            message: `Áp dụng thành công mã ${clean}! Giảm ${found.discountAmount.toLocaleString('vi-VN')}đ.`,
+            message: `Áp dụng thành công mã ${clean}! Giảm ${actualDiscount.toLocaleString('vi-VN')}đ.`,
           };
         }
 

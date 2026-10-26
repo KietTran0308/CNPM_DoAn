@@ -21,7 +21,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 const USE_MOCK = process.env.NEXT_PUBLIC_USE_MOCK_API === 'true';
 
 /** Giá trị thay thế mặc định khi ảnh bị lỗi */
-const FALLBACK_IMAGE = '/images/artisan_hero_food_1791967258188.jpg';
+const FALLBACK_IMAGE = '/artisan_hero_food_1791967258188.jpg';
 
 // ---------------------------------------------------------------
 // 2. HELPER: FETCH CÓ XỬ LÝ LỖI

@@ -15,7 +15,7 @@ export interface CartContextType {
       toppings: ToppingOption[];
       iceLevel: '0%' | '30%' | '50%' | '100%';
       sugarLevel: '0%' | '30%' | '50%' | '100%';
-      note?: string;
+      note: string;
       quantity: number;
       unitPrice: number;
     }

@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { SIZES as FALLBACK_SIZES, TOPPINGS as FALLBACK_TOPPINGS } from '../constants';
+import { SIZES, TOPPINGS } from '../constants';
+import { menuApi, USE_MOCK_API } from '../services/api';
 import { SizeOption, ToppingOption } from '../types';
 import { formatCurrency } from '../utils';
-import { X, Plus, Minus, Check, Loader2 } from 'lucide-react';
-import { getProductOptions } from '../services/product.api';
+import { X, Plus, Minus, Check } from 'lucide-react';
 
 export const ProductDetailModal: React.FC = () => {
   const {
@@ -20,46 +20,16 @@ export const ProductDetailModal: React.FC = () => {
   const isEditing = Boolean(editingCartItem);
   const product = editingCartItem ? editingCartItem.product : activeProductDetail;
 
-  // Sizes & toppings từ API (có fallback về constants)
-  const [sizes, setSizes] = useState<SizeOption[]>(FALLBACK_SIZES);
-  const [toppings, setToppings] = useState<ToppingOption[]>(FALLBACK_TOPPINGS);
-  const [isLoadingOptions, setIsLoadingOptions] = useState(false);
-
-  const [selectedSize, setSelectedSize] = useState<SizeOption>(FALLBACK_SIZES[0]);
+  const [selectedSize, setSelectedSize] = useState<SizeOption>(SIZES[0]);
   const [selectedToppings, setSelectedToppings] = useState<ToppingOption[]>([]);
   const [iceLevel, setIceLevel] = useState<'0%' | '30%' | '50%' | '100%'>('50%');
   const [sugarLevel, setSugarLevel] = useState<'0%' | '30%' | '50%' | '100%'>('50%');
   const [quantity, setQuantity] = useState<number>(1);
   const [note, setNote] = useState<string>('');
-
-  // Gọi GET /products/options để lấy sizes & toppings từ backend
-  useEffect(() => {
-    if (!product) return;
-
-    let cancelled = false;
-    setIsLoadingOptions(true);
-
-    getProductOptions()
-      .then(({ sizes: apiSizes, toppings: apiToppings }) => {
-        if (cancelled) return;
-        const validSizes = apiSizes.length > 0 ? apiSizes : FALLBACK_SIZES;
-        const validToppings = apiToppings.length > 0 ? apiToppings : FALLBACK_TOPPINGS;
-        setSizes(validSizes);
-        setToppings(validToppings);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          // Fallback về constants khi API lỗi
-          setSizes(FALLBACK_SIZES);
-          setToppings(FALLBACK_TOPPINGS);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoadingOptions(false);
-      });
-
-    return () => { cancelled = true; };
-  }, [product?.id]);
+  const [dbSizes, setDbSizes] = useState<SizeOption[]>(USE_MOCK_API ? SIZES : []);
+  const [dbToppings, setDbToppings] = useState<ToppingOption[]>(USE_MOCK_API ? TOPPINGS : []);
+  const [optionsLoading, setOptionsLoading] = useState(false);
+  const [optionsError, setOptionsError] = useState('');
 
   useEffect(() => {
     if (editingCartItem) {
@@ -70,14 +40,45 @@ export const ProductDetailModal: React.FC = () => {
       setQuantity(editingCartItem.quantity);
       setNote(editingCartItem.note || '');
     } else if (activeProductDetail) {
-      setSelectedSize(sizes[0] ?? FALLBACK_SIZES[0]);
+      setSelectedSize(SIZES[0]);
       setSelectedToppings([]);
       setIceLevel('50%');
       setSugarLevel('50%');
       setQuantity(1);
       setNote('');
     }
-  }, [editingCartItem, activeProductDetail, sizes]);
+  }, [editingCartItem, activeProductDetail]);
+
+  useEffect(() => {
+    const current = editingCartItem?.product ?? activeProductDetail;
+    if (!current || USE_MOCK_API) return;
+    let cancelled = false;
+    setOptionsLoading(true);
+    setOptionsError('');
+    setDbSizes([]);
+    setDbToppings([]);
+    menuApi.getOptions(current.id).then(options => {
+      if (cancelled) return;
+      const sizes = options.sizes.map(row => ({
+        ...SIZES.find(s => s.id === row.size)!,
+        extraPrice: Number(row.price) - current.basePrice,
+      }));
+      const toppings = options.toppings.map(row => ({
+        id: row.id, name: row.name, price: Number(row.price),
+      }));
+      setDbSizes(sizes);
+      setDbToppings(toppings);
+      const oldSize = editingCartItem?.size.id ?? 'S';
+      setSelectedSize(sizes.find(s => s.id === oldSize) ?? sizes[0] ?? SIZES[0]);
+      if (editingCartItem) {
+        const selectedIds = new Set(editingCartItem.toppings.map(t => t.id));
+        setSelectedToppings(toppings.filter(t => selectedIds.has(t.id)));
+      }
+    }).catch(err => {
+      if (!cancelled) setOptionsError(err instanceof Error ? err.message : 'Không tải được size và topping');
+    }).finally(() => { if (!cancelled) setOptionsLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeProductDetail?.id, editingCartItem?.cartItemId]);
 
   if (!product) return null;
 
@@ -106,6 +107,7 @@ export const ProductDetailModal: React.FC = () => {
   };
 
   const handleSave = () => {
+    if (optionsLoading || optionsError || (!USE_MOCK_API && !dbSizes.length)) return;
     if (isEditing && editingCartItem) {
       updateCartItem(editingCartItem.cartItemId, {
         size: selectedSize,
@@ -155,9 +157,6 @@ export const ProductDetailModal: React.FC = () => {
                 Đang sửa
               </span>
             )}
-            {isLoadingOptions && (
-              <Loader2 className="w-3.5 h-3.5 text-[#035542]/60 animate-spin" />
-            )}
           </div>
 
           <button
@@ -176,7 +175,7 @@ export const ProductDetailModal: React.FC = () => {
             <div className="md:col-span-5 flex flex-col">
               <div className="relative w-full aspect-square rounded-[20px] overflow-hidden bg-stone-100 mb-3.5 shadow-sm">
                 <img
-                  src={product.image} onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = "/images/artisan_hero_food_1791967258188.jpg"; }}
+                  src={product.image} onError={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = "/artisan_hero_food_1791967258188.jpg"; }}
                   alt={product.name}
                   referrerPolicy="no-referrer"
                   className="w-full h-full object-cover"
@@ -220,33 +219,36 @@ export const ProductDetailModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* Size Selector — dữ liệu từ GET /products/options */}
+              {/* Size Selector */}
               <div className="space-y-2">
                 <label className="text-xs font-bold text-[#035542] uppercase tracking-wider block">
                   Chọn kích thước (Size)
                 </label>
 
+                {optionsLoading && <p role="status" className="text-xs">Đang tải size và topping từ hệ thống...</p>}
+                {optionsError && <p role="alert" className="text-xs text-red-600">{optionsError}</p>}
                 <div className="grid grid-cols-3 gap-2">
-                  {sizes.map((size) => {
+                  {(USE_MOCK_API ? SIZES : dbSizes).map((size) => {
                     const isSelected = selectedSize.id === size.id;
                     return (
                       <button
                         key={size.id}
                         type="button"
-                        id={`btn-size-${size.id}`}
                         onClick={() => setSelectedSize(size)}
-                        className={`touch-target p-2.5 rounded-[14px] text-left transition-all cursor-pointer flex flex-col justify-between ${isSelected
+                        className={`touch-target p-2.5 rounded-[14px] text-left transition-all cursor-pointer flex flex-col justify-between ${
+                          isSelected
                             ? 'liquid-glass border-[#035542] ring-2 ring-[#035542]/20 shadow-xs'
                             : 'bg-white/70 hover:bg-white border border-black/5'
-                          }`}
+                        }`}
                       >
                         <div className="flex items-center justify-between w-full">
                           <span className="text-xs font-bold text-[#333333] truncate">
                             {size.name}
                           </span>
                           <div
-                            className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ml-1 ${isSelected ? 'border-[#035542] bg-[#035542]' : 'border-black/20'
-                              }`}
+                            className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 ml-1 ${
+                              isSelected ? 'border-[#035542] bg-[#035542]' : 'border-black/20'
+                            }`}
                           >
                             {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
                           </div>
@@ -263,29 +265,30 @@ export const ProductDetailModal: React.FC = () => {
                 </div>
               </div>
 
-              {/* Topping Selector — dữ liệu từ GET /products/options */}
+              {/* Topping Selector */}
               <div className="space-y-2">
                 <label className="text-xs font-bold text-[#035542] uppercase tracking-wider block">
                   Thêm Topping tùy chọn
                 </label>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {toppings.map((topping) => {
+                  {(USE_MOCK_API ? TOPPINGS : dbToppings).map((topping) => {
                     const isChecked = selectedToppings.some((t) => t.id === topping.id);
                     return (
                       <div
                         key={topping.id}
-                        id={`topping-${topping.id}`}
                         onClick={() => handleToggleTopping(topping)}
-                        className={`touch-target px-3 py-2 rounded-[12px] flex items-center justify-between transition-all cursor-pointer ${isChecked
+                        className={`touch-target px-3 py-2 rounded-[12px] flex items-center justify-between transition-all cursor-pointer ${
+                          isChecked
                             ? 'liquid-glass border-[#035542] shadow-2xs'
                             : 'bg-white/60 hover:bg-white border border-black/5'
-                          }`}
+                        }`}
                       >
                         <div className="flex items-center gap-2">
                           <div
-                            className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${isChecked ? 'border-[#035542] bg-[#035542] text-white' : 'border-black/20'
-                              }`}
+                            className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                              isChecked ? 'border-[#035542] bg-[#035542] text-white' : 'border-black/20'
+                            }`}
                           >
                             {isChecked && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                           </div>
@@ -311,12 +314,12 @@ export const ProductDetailModal: React.FC = () => {
                       <button
                         key={lvl}
                         type="button"
-                        id={`btn-ice-${lvl.replace('%', '')}`}
                         onClick={() => setIceLevel(lvl)}
-                        className={`touch-target h-9 rounded-full text-xs font-semibold uppercase transition-all ${iceLevel === lvl
+                        className={`touch-target h-9 rounded-full text-xs font-semibold uppercase transition-all ${
+                          iceLevel === lvl
                             ? 'bg-[#035542] text-white shadow-xs'
                             : 'bg-white/70 hover:bg-white text-[#333333] border border-black/5'
-                          }`}
+                        }`}
                       >
                         {lvl}
                       </button>
@@ -331,12 +334,12 @@ export const ProductDetailModal: React.FC = () => {
                       <button
                         key={lvl}
                         type="button"
-                        id={`btn-sugar-${lvl.replace('%', '')}`}
                         onClick={() => setSugarLevel(lvl)}
-                        className={`touch-target h-9 rounded-full text-xs font-semibold uppercase transition-all ${sugarLevel === lvl
+                        className={`touch-target h-9 rounded-full text-xs font-semibold uppercase transition-all ${
+                          sugarLevel === lvl
                             ? 'bg-[#035542] text-white shadow-xs'
                             : 'bg-white/70 hover:bg-white text-[#333333] border border-black/5'
-                          }`}
+                        }`}
                       >
                         {lvl}
                       </button>
@@ -352,7 +355,6 @@ export const ProductDetailModal: React.FC = () => {
                 </label>
                 <input
                   type="text"
-                  id="input-note-barista"
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   placeholder="VD: Để riêng đá, ít béo..."
@@ -370,7 +372,6 @@ export const ProductDetailModal: React.FC = () => {
           <div className="flex items-center rounded-full bg-stone-100 border border-black/5 p-0.5 shrink-0">
             <button
               type="button"
-              id="btn-quantity-decrease"
               onClick={() => setQuantity((q) => Math.max(1, q - 1))}
               disabled={quantity <= 1}
               className="touch-target w-9 h-9 rounded-full bg-white flex items-center justify-center text-[#333333] hover:text-[#035542] disabled:opacity-30 cursor-pointer shadow-2xs"
@@ -383,7 +384,6 @@ export const ProductDetailModal: React.FC = () => {
             </span>
             <button
               type="button"
-              id="btn-quantity-increase"
               onClick={() => setQuantity((q) => q + 1)}
               className="touch-target w-9 h-9 rounded-full bg-white flex items-center justify-center text-[#333333] hover:text-[#035542] cursor-pointer shadow-2xs"
               aria-label="Tăng số lượng"
@@ -395,8 +395,8 @@ export const ProductDetailModal: React.FC = () => {
           {/* Pill CTA Button */}
           <button
             type="button"
-            id="btn-add-to-cart"
             onClick={handleSave}
+                  disabled={optionsLoading || !!optionsError || (!USE_MOCK_API && !dbSizes.length)}
             className="touch-target flex-1 h-12 px-5 rounded-full liquid-glass-emerald text-white hover:brightness-105 active:scale-[0.98] font-bold text-xs sm:text-sm uppercase flex items-center justify-between transition-all cursor-pointer shadow-lg"
           >
             <span>{isEditing ? 'Lưu thay đổi vào giỏ' : 'Thêm vào giỏ hàng'}</span>

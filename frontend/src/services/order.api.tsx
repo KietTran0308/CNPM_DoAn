@@ -1,5 +1,4 @@
 // frontend/src/services/order.api.ts
-import { CartItem } from '../types/cart';
 
 export interface CreateOrderPayload {
   customer: {
