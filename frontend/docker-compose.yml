@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: brewlite-frontend
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      VITE_API_URL: "${VITE_API_URL:-}"
+      NEXT_PUBLIC_API_URL: "${NEXT_PUBLIC_API_URL:-}"
+    ports:
+      - "3000:3000"
