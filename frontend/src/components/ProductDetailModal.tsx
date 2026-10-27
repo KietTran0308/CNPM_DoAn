@@ -107,7 +107,8 @@ export const ProductDetailModal: React.FC = () => {
   };
 
   const handleSave = () => {
-    if (optionsLoading || optionsError || (!USE_MOCK_API && !dbSizes.length)) return;
+    if (product.stock === 0 || (product.stock !== undefined && quantity > product.stock) ||
+        optionsLoading || optionsError || (!USE_MOCK_API && !dbSizes.length)) return;
     if (isEditing && editingCartItem) {
       updateCartItem(editingCartItem.cartItemId, {
         size: selectedSize,
@@ -384,7 +385,8 @@ export const ProductDetailModal: React.FC = () => {
             </span>
             <button
               type="button"
-              onClick={() => setQuantity((q) => q + 1)}
+              onClick={() => setQuantity((q) => Math.min(product.stock ?? Number.MAX_SAFE_INTEGER, q + 1))}
+              disabled={product.stock !== undefined && quantity >= product.stock}
               className="touch-target w-9 h-9 rounded-full bg-white flex items-center justify-center text-[#333333] hover:text-[#035542] cursor-pointer shadow-2xs"
               aria-label="Tăng số lượng"
             >
@@ -396,7 +398,7 @@ export const ProductDetailModal: React.FC = () => {
           <button
             type="button"
             onClick={handleSave}
-                  disabled={optionsLoading || !!optionsError || (!USE_MOCK_API && !dbSizes.length)}
+                  disabled={product.stock === 0 || (product.stock !== undefined && quantity > product.stock) || optionsLoading || !!optionsError || (!USE_MOCK_API && !dbSizes.length)}
             className="touch-target flex-1 h-12 px-5 rounded-full liquid-glass-emerald text-white hover:brightness-105 active:scale-[0.98] font-bold text-xs sm:text-sm uppercase flex items-center justify-between transition-all cursor-pointer shadow-lg"
           >
             <span>{isEditing ? 'Lưu thay đổi vào giỏ' : 'Thêm vào giỏ hàng'}</span>

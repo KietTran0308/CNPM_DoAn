@@ -9,6 +9,7 @@ describe('Order State Machine', () => {
         expect(() => assertTransition('READY', 'COMPLETED')).not.toThrow();
         expect(() => assertTransition('PAYMENT_FAILED', 'PENDING')).not.toThrow();
         expect(canTransition('PENDING', 'CANCELLED')).toBe(true);
+        expect(canTransition('PAID', 'CANCELLED')).toBe(true);
     });
 
     it('từ chối các bước sai', () => {
@@ -16,6 +17,8 @@ describe('Order State Machine', () => {
         expect(() => assertTransition('COMPLETED', 'PAID')).toThrow();
         expect(() => assertTransition('CANCELLED', 'PAID')).toThrow();
         expect(() => assertTransition('PREPARING', 'CANCELLED')).toThrow();
+        expect(() => assertTransition('CANCELLED', 'PENDING')).toThrow();
+        expect(() => assertTransition('READY', 'CANCELLED')).toThrow();
     });
 });
 

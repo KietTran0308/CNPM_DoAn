@@ -1,29 +1,56 @@
+import 'dotenv/config';
+
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
-import request from 'supertest';
-import { App } from 'supertest/types';
-import { AppModule } from './../src/app.module.js';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import request = require('supertest');
 
-describe('AppController (e2e)', () => {
-  let app: INestApplication<App>;
+import { AppModule } from '../src/AppModule';
 
-  beforeEach(async () => {
-    const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule],
-    }).compile();
+describe('BrewLite API E2E', () => {
+    let app: INestApplication;
 
-    app = moduleFixture.createNestApplication();
-    await app.init();
-  });
+    beforeAll(async () => {
+        const moduleFixture: TestingModule =
+            await Test.createTestingModule({
+                imports: [AppModule],
+            }).compile();
 
-  it('/ (GET)', () => {
-    return request(app.getHttpServer())
-      .get('/')
-      .expect(200)
-      .expect('Hello World!');
-  });
+        app = moduleFixture.createNestApplication();
 
-  afterEach(async () => {
-    await app.close();
-  });
+        app.useGlobalPipes(
+            new ValidationPipe({
+                whitelist: true,
+                forbidNonWhitelisted: true,
+                transform: true,
+            }),
+        );
+
+        await app.init();
+    });
+
+    afterAll(async () => {
+        await app.close();
+    });
+
+    it('GET /health trả về 200', async () => {
+        await request(app.getHttpServer())
+            .get('/health')
+            .expect(200)
+            .expect({ status: 'ok' });
+    });
+
+    it('GET /products trả về danh sách', async () => {
+        const response = await request(app.getHttpServer())
+            .get('/products')
+            .expect(200);
+
+        expect(Array.isArray(response.body)).toBe(true);
+    });
+
+    it('POST /orders không JWT trả về 401', async () => {
+        await request(app.getHttpServer())
+            .post('/orders')
+            .send({ items: [] })
+            .expect(401);
+    });
 });

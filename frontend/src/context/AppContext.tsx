@@ -103,6 +103,8 @@ export interface AppContextType {
     // Server state data
     products: Product[];
     isProductsLoading: boolean;
+    isProductsError: boolean;
+    refetchProducts: () => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -208,7 +210,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const cartTotal = Math.max(0, cartSubtotal - discount - pointsDiscount);
 
     // TanStack Query: Products & Orders
-    const { products, isLoading: isProductsLoading } = useProducts();
+    const { products, isLoading: isProductsLoading, isError: isProductsError, refetch: refetchProducts } = useProducts();
     const { orders, latestOrder, createOrder, advanceOrderStatus, reOrder, cancelOrder, isCancelling } = useOrders();
     useEffect(() => {
         let active = true;
@@ -290,6 +292,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         products,
         isProductsLoading,
+        isProductsError,
+        refetchProducts: () => { void refetchProducts(); },
     };
 
     return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

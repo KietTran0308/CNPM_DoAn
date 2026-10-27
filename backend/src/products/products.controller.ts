@@ -15,13 +15,13 @@ export class ProductsController {
 
     // GET /products/:id/options
     @Get(':id/options')
-    getOptions(@Param('id', new ParseUUIDPipe({ version: '5' })) id: string) {
+    getOptions(@Param('id', new ParseUUIDPipe()) id: string) {
         return this.productsService.getOptions(id);
     }
 
     // GET /products/:id
     @Get(':id')
-    findById(@Param('id', new ParseUUIDPipe({ version: '5' })) id: string) {
+    findById(@Param('id', new ParseUUIDPipe()) id: string) {
         return this.productsService.findById(id);
     }
 }

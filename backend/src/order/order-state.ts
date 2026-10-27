@@ -7,7 +7,7 @@ export { OrderStatus };
 export const ALLOWED_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
     PENDING: ['PAID', 'PAYMENT_FAILED', 'CANCELLED'],
     PAYMENT_FAILED: ['PENDING', 'CANCELLED'],
-    PAID: ['PREPARING'],
+    PAID: ['PREPARING', 'CANCELLED'],
     PREPARING: ['READY'],
     READY: ['COMPLETED'],
     COMPLETED: [],

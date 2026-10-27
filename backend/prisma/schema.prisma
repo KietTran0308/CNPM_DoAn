@@ -158,6 +158,9 @@ model Order {
   loyaltyTransactions LoyaltyTransaction[]
   statusHistory       OrderStatusHistory[]
 
+  idempotencyKey String? @unique(map: "orders_idempotencyKey_key") @db.VarChar(128)
+  requestHash    String? @db.VarChar(64)
+
   @@index([userId, createdAt], map: "idx_orders_user_created")
   @@index([status], map: "idx_orders_status")
   @@index([couponId], map: "idx_orders_coupon")

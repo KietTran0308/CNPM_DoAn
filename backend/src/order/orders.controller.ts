@@ -17,7 +17,7 @@ import {
     ValidateNested
 } from 'class-validator';
 
-import {Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Req, UseGuards} from '@nestjs/common';
+import {Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Req, UseGuards, Headers} from '@nestjs/common';
 import {JwtGuard, CurrentUser} from '../auth/jwt.guard';
 import {OrdersService} from './orders.service';
 
@@ -70,8 +70,16 @@ export class OrdersController {
     }
 
     @Post()
-    create(@Req() req: { user: CurrentUser }, @Body() dto: CreateOrderDto) {
-        return this.ordersService.create(req.user.id, dto);
+    create(
+        @Req() req: { user: CurrentUser },
+        @Headers('idempotency-key') key: string,
+        @Body() dto: CreateOrderDto,
+    ) {
+        return this.ordersService.create(
+            req.user.id,
+            dto,
+            key,
+        );
     }
 
     @Get('me')
@@ -82,7 +90,7 @@ export class OrdersController {
     @Patch(':id/status')
     changeStatus(
         @Req() req: { user: CurrentUser },
-        @Param('id', new ParseUUIDPipe({version: '5'})) id: string,
+        @Param('id', new ParseUUIDPipe()) id: string,
         @Body() dto: StatusDto,
     ) {
         return this.ordersService.changeStatus(id, dto.status, req.user.role);
@@ -91,7 +99,7 @@ export class OrdersController {
     @Post(':id/cancel')
     cancel(
         @Req() req: { user: CurrentUser },
-        @Param('id', new ParseUUIDPipe({version: '5'})) id: string,
+        @Param('id', new ParseUUIDPipe()) id: string,
     ) {
         return this.ordersService.cancel(id, req.user.id);
     }

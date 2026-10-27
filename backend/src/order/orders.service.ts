@@ -4,8 +4,11 @@ import {
     ForbiddenException,
     Injectable,
     NotFoundException,
+    OnModuleInit,
+    OnModuleDestroy
 } from '@nestjs/common';
 import { OrderStatus, Prisma } from '@prisma/client';
+import { createHash } from 'node:crypto';
 import { PrismaService } from '../prisma.service';
 import { ProductsService } from '../products/products.service';
 import type { CreateOrderDto, OrderItemDto } from './orders.controller';
@@ -62,14 +65,121 @@ export class PricingService {
 }
 
 @Injectable()
-export class OrdersService {
+export class OrdersService implements OnModuleInit, OnModuleDestroy{
     constructor(
         private readonly prisma: PrismaService,
         private readonly pricingService: PricingService,
         private readonly productsService: ProductsService,
     ) {}
 
-    async create(userId: string, dto: CreateOrderDto) {
+    private expiryTimer?: ReturnType<typeof setInterval>;
+
+    onModuleInit() {
+        this.expiryTimer = setInterval(() => {
+            void this.expirePendingOrders().catch(error => {
+                console.error('Lỗi xử lý đơn hết hạn:', error);
+            });
+        }, 60_000);
+    }
+
+    onModuleDestroy() {
+        if (this.expiryTimer) {
+            clearInterval(this.expiryTimer);
+        }
+    }
+
+    private async expirePendingOrders() {
+        const expiredOrders = await this.prisma.order.findMany({
+            where: {
+                status: {
+                    in: [
+                        OrderStatus.PENDING,
+                        OrderStatus.PAYMENT_FAILED,
+                    ],
+                },
+                expiresAt: {
+                    lte: new Date(),
+                },
+            },
+            select: {
+                id: true,
+                userId: true,
+            },
+            take: 100,
+        });
+
+        for (const order of expiredOrders) {
+            try {
+                await this.cancel(order.id, order.userId);
+            } catch (error) {
+                console.error(
+                    `Không thể hủy đơn hết hạn ${order.id}:`,
+                    error
+                );
+            }
+        }
+    }
+
+    async create(
+        userId: string,
+        dto: CreateOrderDto,
+        key?: string,
+    )  {
+        const idempotencyKey = key?.trim();
+
+        if (
+            !idempotencyKey ||
+            idempotencyKey.length < 8 ||
+            idempotencyKey.length > 128
+        ) {
+            throw new BadRequestException(
+                'Idempotency-Key phải có 8–128 ký tự'
+            );
+        }
+
+        const normalizedItems = dto.items
+            .map(item => ({
+                productId: item.productId,
+                size: item.size,
+                qty: item.qty,
+                toppingIds: [
+                    ...(item.toppingIds ?? []),
+                ].sort(),
+            }))
+            .sort((a, b) =>
+                JSON.stringify(a).localeCompare(JSON.stringify(b))
+            );
+
+        const requestHash = createHash('sha256')
+            .update(JSON.stringify({
+                items: normalizedItems,
+                couponCode:
+                    dto.couponCode?.trim().toUpperCase() ?? null,
+                pointsToUse: dto.pointsToUse ?? 0,
+            }))
+            .digest('hex');
+
+        const existing = await this.prisma.order.findUnique({
+            where: { idempotencyKey },
+        });
+
+        if (existing) {
+            if (
+                existing.userId !== userId ||
+                existing.requestHash !== requestHash
+            ) {
+                throw new ConflictException(
+                    'Idempotency-Key đã dùng cho yêu cầu khác'
+                );
+            }
+
+            return {
+                id: existing.id,
+                orderCode: existing.orderCode,
+                status: existing.status,
+                total: Number(existing.total),
+            };
+        }
         try {
             return await this.prisma.$transaction(async (tx) => {
                 let subtotal = 0;
@@ -143,6 +253,8 @@ export class OrdersService {
 
                 const order = await tx.order.create({
                     data: {
+                        idempotencyKey,
+                        requestHash,
                         user: { connect: { id: userId } },
                         ...(couponId ? { coupon: { connect: { id: couponId } } } : {}),
                         subtotal,
@@ -167,9 +279,37 @@ export class OrdersService {
                 };
             }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
         } catch (error: any) {
-            if (error?.code === 'P2034') {
-                throw new ConflictException('Có đơn đặt cùng lúc, vui lòng thử lại');
+            if (
+                error?.code === 'P2002' ||
+                error?.code === 'P2034'
+            ) {
+                const saved = await this.prisma.order.findUnique({
+                    where: { idempotencyKey },
+                });
+
+                if (saved) {
+                    if (
+                        saved.userId !== userId ||
+                        saved.requestHash !== requestHash
+                    ) {
+                        throw new ConflictException(
+                            'Idempotency-Key đã dùng cho yêu cầu khác'
+                        );
+                    }
+
+                    return {
+                        id: saved.id,
+                        orderCode: saved.orderCode,
+                        status: saved.status,
+                        total: Number(saved.total),
+                    };
+                }
+
+                throw new ConflictException(
+                    'Đơn đang được xử lý, vui lòng thử lại với cùng key'
+                );
             }
+
             throw error;
         }
     }
@@ -237,10 +377,10 @@ export class OrdersService {
                 const order = await tx.order.findFirst({ where: { id: orderId, userId } });
                 if (!order) throw new NotFoundException('Không tìm thấy đơn hàng');
 
-                // Hủy sau thanh toán cần mock-refund; chưa tự động hoàn tiền.
-                if (order.status !== OrderStatus.PENDING &&
-                    order.status !== OrderStatus.PAYMENT_FAILED) {
-                    throw new BadRequestException('Đơn đã thanh toán cần xử lý hoàn tiền riêng');
+                if (order.status !== OrderStatus.PENDING && order.status !== OrderStatus.PAYMENT_FAILED && order.status !== OrderStatus.PAID) {
+                    throw new BadRequestException(
+                        'Trạng thái hiện tại không cho phép hủy đơn'
+                    );
                 }
                 assertTransition(order.status, OrderStatus.CANCELLED);
 
@@ -261,6 +401,119 @@ export class OrdersService {
                             version: { increment: 1 },
                         },
                     });
+                }
+
+                if (order.status === OrderStatus.PAID) {
+                    // 1. Tìm giao dịch đã thanh toán thành công.
+                    const payment = await tx.payment.findFirst({
+                        where: {
+                            orderId,
+                            status: 'SUCCESS',
+                        },
+                    });
+
+                    if (!payment) {
+                        throw new ConflictException(
+                            'Không tìm thấy giao dịch thanh toán thành công'
+                        );
+                    }
+
+                    // 2. Đánh dấu hoàn tiền mô phỏng.
+                    // Giữ SUCCESS làm lịch sử thanh toán gốc.
+                    await tx.payment.update({
+                        where: { id: payment.id },
+                        data: {
+                            providerRef: `MOCK_REFUNDED:${payment.id}`,
+                        },
+                    });
+
+                    // 3. Hoàn lượt sử dụng mã khuyến mãi.
+                    if (order.couponId) {
+                        const restored = await tx.coupon.updateMany({
+                            where: {
+                                id: order.couponId,
+                                usedCount: { gt: 0 },
+                            },
+                            data: {
+                                usedCount: { decrement: 1 },
+                            },
+                        });
+
+                        if (restored.count !== 1) {
+                            throw new ConflictException(
+                                'Không thể hoàn lượt sử dụng mã giảm giá'
+                            );
+                        }
+
+                        await tx.userVoucher.updateMany({
+                            where: {
+                                couponId: order.couponId,
+                                userId,
+                            },
+                            data: {
+                                usedAt: null,
+                            },
+                        });
+                    }
+
+                    // 4. Xác định số điểm đã sử dụng và đã nhận.
+                    const movements = await tx.loyaltyTransaction.findMany({
+                        where: { orderId },
+                    });
+
+                    const earned =
+                        movements.find(m => m.type === 'EARN')?.points ?? 0;
+
+                    const redeemed =
+                        movements.find(m => m.type === 'REDEEM')?.points ?? 0;
+
+                    // Hoàn điểm đã sử dụng, thu hồi điểm được cộng.
+                    const difference = redeemed - earned;
+
+                    if (difference !== 0) {
+                        const updated = await tx.user.updateMany({
+                            where: {
+                                id: userId,
+                                loyaltyPoints: {
+                                    gte: Math.max(0, -difference),
+                                },
+                            },
+                            data: {
+                                loyaltyPoints: {
+                                    increment: difference,
+                                },
+                            },
+                        });
+
+                        if (updated.count !== 1) {
+                            throw new ConflictException(
+                                'Không đủ điểm để thu hồi thưởng; cần xử lý thủ công'
+                            );
+                        }
+                    }
+
+                    // Ghi lịch sử bút toán đảo chiều.
+                    // orderId để null vì SQL đang giới hạn
+                    // mỗi đơn chỉ có một EARN và một REDEEM.
+                    if (redeemed > 0) {
+                        await tx.loyaltyTransaction.create({
+                            data: {
+                                userId,
+                                points: redeemed,
+                                type: 'EARN',
+                            },
+                        });
+                    }
+
+                    if (earned > 0) {
+                        await tx.loyaltyTransaction.create({
+                            data: {
+                                userId,
+                                points: earned,
+                                type: 'REDEEM',
+                            },
+                        });
+                    }
                 }
 
                 await tx.orderStatusHistory.create({
