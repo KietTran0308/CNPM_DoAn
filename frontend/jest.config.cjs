@@ -12,5 +12,6 @@ module.exports = {
       },
     ],
   },
+  modulePathIgnorePatterns: ['<rootDir>/.next/'],
   verbose: true,
 };

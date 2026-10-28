@@ -43,14 +43,6 @@ import { CheckoutScreen } from '../screens/CheckoutScreen';
 import { SuccessScreen } from '../screens/SuccessScreen';
 import { HistoryScreen } from '../screens/HistoryScreen';
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      retry: 1,
-    },
-  },
-});
 
 function BrewLiteApp() {
   // Navigation State
@@ -967,9 +959,22 @@ function BrewLiteApp() {
 }
 
 export default function Home() {
+  const [queryClient] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            refetchOnWindowFocus: false,
+            retry: 1,
+          },
+        },
+      })
+  );
+
   return (
     <QueryClientProvider client={queryClient}>
       <BrewLiteApp />
     </QueryClientProvider>
   );
 }
+
