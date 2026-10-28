@@ -10,7 +10,6 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      VITE_API_URL: "${VITE_API_URL:-}"
-      NEXT_PUBLIC_API_URL: "${NEXT_PUBLIC_API_URL:-}"
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
     ports:
       - "3000:3000"

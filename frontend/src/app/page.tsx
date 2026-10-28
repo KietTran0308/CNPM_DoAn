@@ -1,9 +1,12 @@
+'use client';
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import React, { useState, useEffect } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import {
   api,
   Product,
@@ -19,7 +22,7 @@ import {
   setStoredToken,
   getStoredUser,
   setStoredUser,
-} from './api';
+} from '../api';
 
 import {
   Screen,
@@ -28,26 +31,35 @@ import {
   SugarType,
   IceType,
   CartLine,
-} from './types';
+} from '../types';
 
-import { EditItemModal } from './components/EditItemModal';
-import { useCartStore } from './store/useCartStore';
-import { AuthScreen } from './pages/AuthScreen';
-import { MenuScreen } from './pages/MenuScreen';
-import { ProductDetailScreen } from './pages/ProductDetailScreen';
-import { CartScreen } from './pages/CartScreen';
-import { CheckoutScreen } from './pages/CheckoutScreen';
-import { SuccessScreen } from './pages/SuccessScreen';
-import { HistoryScreen } from './pages/HistoryScreen';
+import { EditItemModal } from '../components/EditItemModal';
+import { useCartStore } from '../store/useCartStore';
+import { AuthScreen } from '../screens/AuthScreen';
+import { MenuScreen } from '../screens/MenuScreen';
+import { ProductDetailScreen } from '../screens/ProductDetailScreen';
+import { CartScreen } from '../screens/CartScreen';
+import { CheckoutScreen } from '../screens/CheckoutScreen';
+import { SuccessScreen } from '../screens/SuccessScreen';
+import { HistoryScreen } from '../screens/HistoryScreen';
 
-export default function App() {
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
+
+function BrewLiteApp() {
   // Navigation State
   const [currentScreen, setCurrentScreen] = useState<Screen>('auth');
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Authentication & Loyalty State (Task 10 - User.loyaltyPoints)
-  const [token, setToken] = useState<string | null>(getStoredToken());
-  const [user, setUser] = useState<User | null>(() => getStoredUser() || DEFAULT_USER);
+  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<User | null>(DEFAULT_USER);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
@@ -612,17 +624,6 @@ export default function App() {
     setCurrentScreen('cart');
   };
 
-  // State Machine transitions for Order History (Task 10 & Sơ đồ trạng thái)
-  const VALID_TRANSITIONS: Record<OrderStatus, OrderStatus[]> = {
-    PENDING: ['PAID', 'PAYMENT_FAILED', 'CANCELLED'],
-    PAYMENT_FAILED: ['PENDING', 'CANCELLED'],
-    PAID: ['PREPARING', 'CANCELLED'],
-    PREPARING: ['READY'],
-    READY: ['COMPLETED'],
-    COMPLETED: [],
-    CANCELLED: [],
-  };
-
   const handleHistoryTransition = async (orderId: string, targetStatus: OrderStatus) => {
     const order =
       orderHistory.find((o) => o.id === orderId) ||
@@ -962,5 +963,13 @@ export default function App() {
         />
       </div>
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <BrewLiteApp />
+    </QueryClientProvider>
   );
 }

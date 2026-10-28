@@ -285,7 +285,7 @@ export const CheckoutScreen: React.FC<CheckoutScreenProps> = ({
                 onClick={() => setPaymentMethod('bank')}
               >
                 <div className="text-xs font-medium">
-                  {paymentMethod === 'bank' ? '(o)' : '( )'} Thẻ ngân hàng
+                  {paymentMethod === 'bank' ? '(o)' : '( )'} Thẻ ngân hàng / Stripe (Visa, Master, Napas)
                 </div>
 
                 {paymentMethod === 'bank' && (

@@ -1,26 +1,9 @@
-// API Client for BrewLite Frontend
-// Supports real REST API via NEXT_PUBLIC_API_URL or VITE_API_URL
+// API Client for BrewLite Frontend (Next.js)
+// Standard Next.js environment configuration via process.env.NEXT_PUBLIC_API_URL
 // with comprehensive Offline Mock Fallback when the backend server is not running.
 
-// Safe environment reader compatible with Vite/Next.js (ESM) and Jest/Node (CJS)
-const getEnvVar = (key: string): string => {
-  try {
-    // Dynamic evaluation prevents CommonJS syntax errors while reading Vite env in browser
-    const meta = new Function('return typeof import.meta !== "undefined" ? import.meta : null')();
-    if (meta && meta.env && meta.env[key]) {
-      return String(meta.env[key]);
-    }
-  } catch {}
-  try {
-    if (typeof process !== 'undefined' && process.env && process.env[key]) {
-      return String(process.env[key]);
-    }
-  } catch {}
-  return '';
-};
-
 export const API_BASE_URL: string =
-  getEnvVar('NEXT_PUBLIC_API_URL') || getEnvVar('VITE_API_URL') || '';
+  (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) || '';
 
 // -------------------------------------------------------------
 // 1. ORDER STATE MACHINE (7 Trạng thái chuẩn)
