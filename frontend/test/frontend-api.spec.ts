@@ -25,8 +25,19 @@ describe('Frontend API Client & Mock Fallback Tests', () => {
   test('GET /products: Trả về danh sách sản phẩm mẫu khi server offline', async () => {
     const products = await api.getProducts();
     expect(Array.isArray(products)).toBe(true);
-    expect(products.length).toBe(DEFAULT_PRODUCTS.length);
+    expect(products.length).toBe(14);
     expect(products[0].name).toBe('Cà phê sữa');
+    
+    // Kiểm tra các món đặc trưng Việt Nam mới thêm
+    const saltCoffee = products.find((p) => p.name === 'Cà Phê Muối Huế');
+    expect(saltCoffee).toBeDefined();
+    expect(saltCoffee?.price).toBe(39000);
+    expect(saltCoffee?.category).toBe('Cà phê');
+
+    const lotusTea = products.find((p) => p.name === 'Trà Sen Vàng Kem Cheese');
+    expect(lotusTea).toBeDefined();
+    expect(lotusTea?.price).toBe(49000);
+    expect(lotusTea?.category).toBe('Trà');
   });
 
   test('GET /products/:id: Trả về đúng sản phẩm theo id', async () => {
@@ -34,6 +45,11 @@ describe('Frontend API Client & Mock Fallback Tests', () => {
     expect(item).not.toBeNull();
     expect(item?.id).toBe(1);
     expect(item?.price).toBe(35000);
+
+    const eggCoffee = await api.getProductById(6);
+    expect(eggCoffee).not.toBeNull();
+    expect(eggCoffee?.name).toBe('Cà Phê Trứng Hà Nội');
+    expect(eggCoffee?.price).toBe(45000);
 
     const nonExistent = await api.getProductById(999);
     expect(nonExistent).toBeNull();

@@ -86,10 +86,22 @@ export const ProductDetailScreen: React.FC<ProductDetailScreenProps> = ({
                 alt={selectedProduct.name}
                 className="w-14 h-14 object-cover rounded border border-gray-300 bg-stone-200 shrink-0"
               />
-              <div className="min-w-0">
-                <div className="font-bold text-sm truncate">{selectedProduct.name}</div>
-                <div className="text-xs text-gray-600 mt-0.5">
-                  Giá gốc: <span className="font-mono">{formatPrice(selectedProduct.price)}</span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <div className="font-bold text-sm truncate">{selectedProduct.name}</div>
+                  {selectedProduct.category && (
+                    <span className="text-[10px] bg-stone-200 text-stone-700 px-1.5 py-0.5 rounded border border-stone-300 font-medium shrink-0">
+                      {selectedProduct.category}
+                    </span>
+                  )}
+                </div>
+                {selectedProduct.description && (
+                  <div className="text-xs text-gray-600 mt-0.5 line-clamp-2">
+                    {selectedProduct.description}
+                  </div>
+                )}
+                <div className="text-xs text-gray-600 mt-1">
+                  Giá gốc: <span className="font-mono font-medium">{formatPrice(selectedProduct.price)}</span>
                 </div>
               </div>
             </div>

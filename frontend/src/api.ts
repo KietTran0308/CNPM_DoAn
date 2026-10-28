@@ -47,13 +47,15 @@ export function assertTransition(current: OrderStatus, target: OrderStatus): voi
 // 2. 12.2 THỰC THỂ TỐI THIỂU (Exact field names)
 // -------------------------------------------------------------
 
-// 1. Product(id, name, price, imageUrl, stock)
+// 1. Product(id, name, price, imageUrl, stock, category, description)
 export interface Product {
   id: number;
   name: string;
   price: number;
   imageUrl: string;
   stock: number;
+  category?: string;
+  description?: string;
 }
 
 // 2. User(id, email, passwordHash, loyaltyPoints)
@@ -104,29 +106,127 @@ export const DEFAULT_PRODUCTS: Product[] = [
     id: 1,
     name: 'Cà phê sữa',
     price: 35000,
-    imageUrl: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=300',
+    imageUrl: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=500&auto=format&fit=crop&q=80',
     stock: 25,
+    category: 'Cà phê',
+    description: 'Cà phê Robusta đậm đà pha sữa đặc thơm béo truyền thống',
   },
   {
     id: 2,
     name: 'Americano',
     price: 40000,
-    imageUrl: 'https://images.unsplash.com/photo-1551030173-122aabc4489c?w=300',
+    imageUrl: 'https://images.unsplash.com/photo-1551030173-122aabc4489c?w=500&auto=format&fit=crop&q=80',
     stock: 20,
+    category: 'Cà phê',
+    description: 'Cà phê đen nguyên chất pha loãng với nước nóng thanh tao',
   },
   {
     id: 3,
     name: 'Cappuccino',
     price: 45000,
-    imageUrl: 'https://images.unsplash.com/photo-1534778101976-62847782c213?w=300',
+    imageUrl: 'https://images.unsplash.com/photo-1534778101976-62847782c213?w=500&auto=format&fit=crop&q=80',
     stock: 15,
+    category: 'Cà phê',
+    description: 'Espresso đậm vị kết hợp sữa nóng và lớp bọt sữa bồng bềnh',
   },
   {
     id: 4,
     name: 'Trà đào',
     price: 39000,
-    imageUrl: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=300',
+    imageUrl: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=500&auto=format&fit=crop&q=80',
     stock: 18,
+    category: 'Trà',
+    description: 'Trà thanh mát kết hợp đào miếng tươi giòn ngọt lịm',
+  },
+  {
+    id: 5,
+    name: 'Cà Phê Muối Huế',
+    price: 39000,
+    imageUrl: 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?w=500&auto=format&fit=crop&q=80',
+    stock: 30,
+    category: 'Cà phê',
+    description: 'Cà phê phin đậm đà kết hợp lớp kem muối mặn ngọt béo ngậy chuẩn vị cố đô',
+  },
+  {
+    id: 6,
+    name: 'Cà Phê Trứng Hà Nội',
+    price: 45000,
+    imageUrl: 'https://images.unsplash.com/photo-1541167760496-1628856ab772?w=500&auto=format&fit=crop&q=80',
+    stock: 25,
+    category: 'Cà phê',
+    description: 'Lớp kem trứng gà đánh bông mịn màng, thơm lừng hòa quyện cùng cà phê nóng',
+  },
+  {
+    id: 7,
+    name: 'Bạc Xỉu Đá Sài Gòn',
+    price: 35000,
+    imageUrl: 'https://images.unsplash.com/photo-1572442388796-11668a67e53d?w=500&auto=format&fit=crop&q=80',
+    stock: 35,
+    category: 'Cà phê',
+    description: 'Sữa đặc pha sữa tươi béo ngậy tạo tầng đẹp mắt cùng cà phê phin thơm nhẹ',
+  },
+  {
+    id: 8,
+    name: 'Cà Phê Cốt Dừa',
+    price: 45000,
+    imageUrl: 'https://images.unsplash.com/photo-1589396575653-c09c794ff6a6?w=500&auto=format&fit=crop&q=80',
+    stock: 20,
+    category: 'Cà phê',
+    description: 'Cốt dừa xay đá tuyết mát lạnh, béo bùi quyện cùng vị đắng dịu của cà phê',
+  },
+  {
+    id: 9,
+    name: 'Cà Phê Sữa Tươi Sương Sáo',
+    price: 39000,
+    imageUrl: 'https://images.unsplash.com/photo-1517256064527-09c73fc73e38?w=500&auto=format&fit=crop&q=80',
+    stock: 28,
+    category: 'Cà phê',
+    description: 'Cà phê sữa tươi thanh nhẹ kết hợp cùng thạch sương sáo đen giòn mát',
+  },
+  {
+    id: 10,
+    name: 'Trà Sen Vàng Kem Cheese',
+    price: 49000,
+    imageUrl: 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=500&auto=format&fit=crop&q=80',
+    stock: 22,
+    category: 'Trà',
+    description: 'Trà Ô long thanh mát kết hợp hạt sen bùi, củ năng giòn và lớp kem phô mai mặn béo',
+  },
+  {
+    id: 11,
+    name: 'Trà Đào Cam Sả',
+    price: 45000,
+    imageUrl: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=500&auto=format&fit=crop&q=80',
+    stock: 30,
+    category: 'Trà',
+    description: 'Hồng trà ủ lạnh thơm hương sả tươi, cam vàng mọng nước và đào miếng giòn ngọt',
+  },
+  {
+    id: 12,
+    name: 'Trà Vải Hoa Hồng',
+    price: 45000,
+    imageUrl: 'https://images.unsplash.com/photo-1595981267035-7b04ca84a82d?w=500&auto=format&fit=crop&q=80',
+    stock: 25,
+    category: 'Trà',
+    description: 'Trà lài thanh tao quyện vị ngọt thanh của trái vải ngâm và hương hoa hồng dịu nhẹ',
+  },
+  {
+    id: 13,
+    name: 'Trà Mãng Cầu Tươi',
+    price: 49000,
+    imageUrl: 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=500&auto=format&fit=crop&q=80',
+    stock: 20,
+    category: 'Trà',
+    description: 'Mãng cầu xiêm tươi dầm chua ngọt sảng khoái trên nền trà xanh lài đậm vị',
+  },
+  {
+    id: 14,
+    name: 'Trà Ô Long Nhãn Nhục Hạt Chia',
+    price: 45000,
+    imageUrl: 'https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=500&auto=format&fit=crop&q=80',
+    stock: 24,
+    category: 'Trà',
+    description: 'Vị ngọt thanh cổ truyền từ nhãn nhục sấy khô, hạt chia bổ dưỡng cùng trà Ô long',
   },
 ];
 
@@ -325,7 +425,13 @@ export const api = {
     return safeFetch<Product[]>('/products', { method: 'GET' }, () => {
       try {
         const stored = localStorage.getItem('brewlite_products');
-        if (stored) return JSON.parse(stored);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (Array.isArray(parsed) && parsed.length >= DEFAULT_PRODUCTS.length) {
+            return parsed;
+          }
+        }
+        localStorage.setItem('brewlite_products', JSON.stringify(DEFAULT_PRODUCTS));
       } catch {}
       return DEFAULT_PRODUCTS;
     });

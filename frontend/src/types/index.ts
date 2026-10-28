@@ -3,7 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { OrderItem } from '../api';
+import { OrderItem, Product, User, Order, Payment, OrderStatus } from '../api';
+
+export type { Product, User, Order, OrderItem, Payment, OrderStatus };
 
 export type Screen =
   | 'auth'
