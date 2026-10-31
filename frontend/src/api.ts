@@ -1,13 +1,8 @@
-// API Client for BrewLite Frontend (Next.js)
-// Standard Next.js environment configuration via process.env.NEXT_PUBLIC_API_URL
-// with comprehensive Offline Mock Fallback when the backend server is not running.
+import { ANH_MAC_DINH, ANH_MON_NUOC } from './hinhAnh';
 
 export const API_BASE_URL: string =
   (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) || '';
 
-// -------------------------------------------------------------
-// 1. ORDER STATE MACHINE (7 Trạng thái chuẩn)
-// -------------------------------------------------------------
 export type OrderStatus =
   | 'PENDING'
   | 'PAID'
@@ -20,7 +15,7 @@ export type OrderStatus =
 export class InvalidStateTransitionError extends Error {
   constructor(current: OrderStatus, target: OrderStatus) {
     super(
-      `Lỗi State Machine: Không thể chuyển từ ${current} sang ${target}. Vòng đời hợp lệ: PENDING -> PAID -> PREPARING -> READY -> COMPLETED.`
+      `Lỗi chuyển trạng thái: Không thể chuyển từ ${current} sang ${target}. Quy trình hợp lệ: PENDING -> PAID -> PREPARING -> READY -> COMPLETED.`
     );
     this.name = 'InvalidStateTransitionError';
   }
@@ -43,11 +38,6 @@ export function assertTransition(current: OrderStatus, target: OrderStatus): voi
   }
 }
 
-// -------------------------------------------------------------
-// 2. 12.2 THỰC THỂ TỐI THIỂU (Exact field names)
-// -------------------------------------------------------------
-
-// 1. Product(id, name, price, imageUrl, stock, category, description)
 export interface Product {
   id: number;
   name: string;
@@ -58,7 +48,6 @@ export interface Product {
   description?: string;
 }
 
-// 2. User(id, email, passwordHash, loyaltyPoints)
 export interface User {
   id: string;
   email: string;
@@ -66,7 +55,6 @@ export interface User {
   loyaltyPoints: number;
 }
 
-// 3. Order(id, userId, status, total, createdAt)
 export interface Order {
   id: string;
   userId: string;
@@ -76,7 +64,6 @@ export interface Order {
   items?: OrderItem[];
 }
 
-// 4. OrderItem(id, orderId, productId, size, qty, lineTotal)
 export interface OrderItem {
   id: string;
   orderId: string;
@@ -89,7 +76,6 @@ export interface OrderItem {
   note?: string;
 }
 
-// 5. Payment(id, orderId, idempotencyKey, amount, method)
 export interface Payment {
   id: string;
   orderId: string;
@@ -98,15 +84,12 @@ export interface Payment {
   method: string;
 }
 
-// -------------------------------------------------------------
-// DEFAULT DATA & MOCK STORAGE
-// -------------------------------------------------------------
 export const DEFAULT_PRODUCTS: Product[] = [
   {
     id: 1,
     name: 'Cà phê sữa',
     price: 35000,
-    imageUrl: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=500&auto=format&fit=crop&q=80',
+    imageUrl: ANH_MON_NUOC.caPheSua || ANH_MAC_DINH,
     stock: 25,
     category: 'Cà phê',
     description: 'Cà phê Robusta đậm đà pha sữa đặc thơm béo truyền thống',
@@ -115,7 +98,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     id: 2,
     name: 'Americano',
     price: 40000,
-    imageUrl: 'https://images.unsplash.com/photo-1551030173-122aabc4489c?w=500&auto=format&fit=crop&q=80',
+    imageUrl: ANH_MON_NUOC.americano || ANH_MAC_DINH,
     stock: 20,
     category: 'Cà phê',
     description: 'Cà phê đen nguyên chất pha loãng với nước nóng thanh tao',
@@ -124,7 +107,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     id: 3,
     name: 'Cappuccino',
     price: 45000,
-    imageUrl: 'https://images.unsplash.com/photo-1534778101976-62847782c213?w=500&auto=format&fit=crop&q=80',
+    imageUrl: ANH_MON_NUOC.cappuccino || ANH_MAC_DINH,
     stock: 15,
     category: 'Cà phê',
     description: 'Espresso đậm vị kết hợp sữa nóng và lớp bọt sữa bồng bềnh',
@@ -133,7 +116,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     id: 4,
     name: 'Trà đào',
     price: 39000,
-    imageUrl: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=500&auto=format&fit=crop&q=80',
+    imageUrl: ANH_MON_NUOC.traDao || ANH_MAC_DINH,
     stock: 18,
     category: 'Trà',
     description: 'Trà thanh mát kết hợp đào miếng tươi giòn ngọt lịm',
@@ -142,7 +125,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     id: 5,
     name: 'Cà Phê Muối Huế',
     price: 39000,
-    imageUrl: 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?w=500&auto=format&fit=crop&q=80',
+    imageUrl: ANH_MON_NUOC.caPheMuoi || ANH_MAC_DINH,
     stock: 30,
     category: 'Cà phê',
     description: 'Cà phê phin đậm đà kết hợp lớp kem muối mặn ngọt béo ngậy chuẩn vị cố đô',
@@ -151,7 +134,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     id: 6,
     name: 'Cà Phê Trứng Hà Nội',
     price: 45000,
-    imageUrl: 'https://images.unsplash.com/photo-1541167760496-1628856ab772?w=500&auto=format&fit=crop&q=80',
+    imageUrl: ANH_MON_NUOC.caPheTrung || ANH_MAC_DINH,
     stock: 25,
     category: 'Cà phê',
     description: 'Lớp kem trứng gà đánh bông mịn màng, thơm lừng hòa quyện cùng cà phê nóng',
@@ -160,7 +143,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     id: 7,
     name: 'Bạc Xỉu Đá Sài Gòn',
     price: 35000,
-    imageUrl: 'https://images.unsplash.com/photo-1572442388796-11668a67e53d?w=500&auto=format&fit=crop&q=80',
+    imageUrl: ANH_MON_NUOC.bacXiu || ANH_MAC_DINH,
     stock: 35,
     category: 'Cà phê',
     description: 'Sữa đặc pha sữa tươi béo ngậy tạo tầng đẹp mắt cùng cà phê phin thơm nhẹ',
@@ -169,7 +152,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     id: 8,
     name: 'Cà Phê Cốt Dừa',
     price: 45000,
-    imageUrl: 'https://images.unsplash.com/photo-1589396575653-c09c794ff6a6?w=500&auto=format&fit=crop&q=80',
+    imageUrl: ANH_MON_NUOC.caPheCotDua || ANH_MAC_DINH,
     stock: 20,
     category: 'Cà phê',
     description: 'Cốt dừa xay đá tuyết mát lạnh, béo bùi quyện cùng vị đắng dịu của cà phê',
@@ -178,7 +161,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     id: 9,
     name: 'Cà Phê Sữa Tươi Sương Sáo',
     price: 39000,
-    imageUrl: 'https://images.unsplash.com/photo-1517256064527-09c73fc73e38?w=500&auto=format&fit=crop&q=80',
+    imageUrl: ANH_MON_NUOC.caPheSuaTuoiSuongSao || ANH_MAC_DINH,
     stock: 28,
     category: 'Cà phê',
     description: 'Cà phê sữa tươi thanh nhẹ kết hợp cùng thạch sương sáo đen giòn mát',
@@ -187,7 +170,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     id: 10,
     name: 'Trà Sen Vàng Kem Cheese',
     price: 49000,
-    imageUrl: 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?w=500&auto=format&fit=crop&q=80',
+    imageUrl: ANH_MON_NUOC.traSenVang || ANH_MAC_DINH,
     stock: 22,
     category: 'Trà',
     description: 'Trà Ô long thanh mát kết hợp hạt sen bùi, củ năng giòn và lớp kem phô mai mặn béo',
@@ -196,7 +179,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     id: 11,
     name: 'Trà Đào Cam Sả',
     price: 45000,
-    imageUrl: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=500&auto=format&fit=crop&q=80',
+    imageUrl: ANH_MON_NUOC.traDaoCamSa || ANH_MAC_DINH,
     stock: 30,
     category: 'Trà',
     description: 'Hồng trà ủ lạnh thơm hương sả tươi, cam vàng mọng nước và đào miếng giòn ngọt',
@@ -205,7 +188,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     id: 12,
     name: 'Trà Vải Hoa Hồng',
     price: 45000,
-    imageUrl: 'https://images.unsplash.com/photo-1595981267035-7b04ca84a82d?w=500&auto=format&fit=crop&q=80',
+    imageUrl: ANH_MON_NUOC.traVaiHoaHong || ANH_MAC_DINH,
     stock: 25,
     category: 'Trà',
     description: 'Trà lài thanh tao quyện vị ngọt thanh của trái vải ngâm và hương hoa hồng dịu nhẹ',
@@ -214,7 +197,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     id: 13,
     name: 'Trà Mãng Cầu Tươi',
     price: 49000,
-    imageUrl: 'https://images.unsplash.com/photo-1513558161293-cdaf765ed2fd?w=500&auto=format&fit=crop&q=80',
+    imageUrl: ANH_MON_NUOC.traMangCau || ANH_MAC_DINH,
     stock: 20,
     category: 'Trà',
     description: 'Mãng cầu xiêm tươi dầm chua ngọt sảng khoái trên nền trà xanh lài đậm vị',
@@ -223,7 +206,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
     id: 14,
     name: 'Trà Ô Long Nhãn Nhục Hạt Chia',
     price: 45000,
-    imageUrl: 'https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=500&auto=format&fit=crop&q=80',
+    imageUrl: ANH_MON_NUOC.traOLongNhanNhuc || ANH_MAC_DINH,
     stock: 24,
     category: 'Trà',
     description: 'Vị ngọt thanh cổ truyền từ nhãn nhục sấy khô, hạt chia bổ dưỡng cùng trà Ô long',
@@ -234,7 +217,17 @@ export const formatPrice = (amount: number): string => {
   return new Intl.NumberFormat('vi-VN').format(amount) + 'đ';
 };
 
-// Token storage helpers
+export const removeVietnameseTones = (str: string): string => {
+  if (!str) return '';
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .toLowerCase()
+    .trim();
+};
+
 export const getStoredToken = (): string | null => {
   try {
     return localStorage.getItem('brewlite_jwt_token');
@@ -250,12 +243,9 @@ export const setStoredToken = (token: string | null): void => {
     } else {
       localStorage.removeItem('brewlite_jwt_token');
     }
-  } catch {
-    // ignore
-  }
+  } catch {}
 };
 
-// User & Loyalty helpers
 export const DEFAULT_USER: User = {
   id: 'usr_001',
   email: 'khachhang@brewlite.vn',
@@ -299,12 +289,9 @@ export const setStoredUser = (user: User | null): void => {
     } else {
       localStorage.removeItem('brewlite_user');
     }
-  } catch {
-    // ignore
-  }
+  } catch {}
 };
 
-// Seed sample orders for demonstrating State Machine in History
 export const SEED_ORDERS: Order[] = [
   {
     id: '1041',
@@ -367,13 +354,9 @@ export const SEED_ORDERS: Order[] = [
   },
 ];
 
-// In-memory idempotency cache for payment requests
 const idempotencyStore = new Map<string, { status: OrderStatus }>();
 
-// -------------------------------------------------------------
-// HELPER: SAFE FETCH WITH OFFLINE FALLBACK
-// -------------------------------------------------------------
-async function safeFetch<T>(
+async function callApiWithFallback<T>(
   path: string,
   options: RequestInit,
   fallbackFn: () => Promise<T> | T
@@ -398,7 +381,6 @@ async function safeFetch<T>(
       return data as T;
     }
 
-    // If server specifically returned 400 or 409 error with message, throw it
     if (res.status === 400 || res.status === 409) {
       const err = await res.json().catch(() => ({}));
       if (err.message) {
@@ -406,57 +388,39 @@ async function safeFetch<T>(
       }
     }
   } catch (err: any) {
-    // If it's a specific validation error from backend, re-throw it
-    if (err.message && !err.message.includes('fetch') && !err.message.includes('abort') && !err.message.includes('Failed to fetch')) {
+    if (
+      err.message &&
+      !err.message.includes('fetch') &&
+      !err.message.includes('abort') &&
+      !err.message.includes('Failed to fetch')
+    ) {
       throw err;
     }
-    // Network unavailable / offline: seamlessly fall back
   }
 
   return fallbackFn();
 }
 
-// -------------------------------------------------------------
-// 12.1 MỘT SỐ ENDPOINT CHÍNH (Frontend REST Client + Mock Fallback)
-// -------------------------------------------------------------
 export const api = {
-  // 1. GET /products: Danh sách sản phẩm (menu)
   async getProducts(): Promise<Product[]> {
-    return safeFetch<Product[]>('/products', { method: 'GET' }, () => {
+    return callApiWithFallback<Product[]>('/products', { method: 'GET' }, () => {
       try {
-        const stored = localStorage.getItem('brewlite_products');
-        if (stored) {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length >= DEFAULT_PRODUCTS.length) {
-            return parsed;
-          }
-        }
-        localStorage.setItem('brewlite_products', JSON.stringify(DEFAULT_PRODUCTS));
+        localStorage.setItem('brewlite_products_v2', JSON.stringify(DEFAULT_PRODUCTS));
       } catch {}
-      return DEFAULT_PRODUCTS;
+      return [...DEFAULT_PRODUCTS];
     });
   },
 
-  // 2. GET /products/:id: Chi tiết một sản phẩm
   async getProductById(id: number): Promise<Product | null> {
-    return safeFetch<Product | null>(`/products/${id}`, { method: 'GET' }, () => {
-      try {
-        const stored = localStorage.getItem('brewlite_products');
-        if (stored) {
-          const list: Product[] = JSON.parse(stored);
-          const item = list.find((p) => p.id === id);
-          if (item) return item;
-        }
-      } catch {}
+    return callApiWithFallback<Product | null>(`/products/${id}`, { method: 'GET' }, () => {
       const found = DEFAULT_PRODUCTS.find((p) => p.id === id);
       return found || null;
     });
   },
 
-  // 3. POST /auth/register: Đăng ký tài khoản (User với loyaltyPoints: 0)
   async register(email: string, password: string): Promise<{ token: string; user: User }> {
     const cleanEmail = email.trim();
-    return safeFetch<{ token: string; user: User }>(
+    return callApiWithFallback<{ token: string; user: User }>(
       '/auth/register',
       {
         method: 'POST',
@@ -464,7 +428,6 @@ export const api = {
         body: JSON.stringify({ email: cleanEmail, password }),
       },
       () => {
-        // Validation regex email chuẩn
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(cleanEmail)) {
           throw new Error('Email không đúng định dạng');
@@ -482,11 +445,11 @@ export const api = {
           id: 'usr_' + Date.now().toString(36),
           email: cleanEmail,
           passwordHash: 'hash_masked',
-          loyaltyPoints: 0, // Tiêu chí Task 1: Luôn khởi tạo 0 điểm
+          loyaltyPoints: 0,
         };
         setStoredAccount(userObj);
 
-        const token = 'jwt_mock_' + btoa(cleanEmail);
+        const token = 'jwt_token_' + btoa(cleanEmail);
         setStoredToken(token);
         setStoredUser(userObj);
 
@@ -495,10 +458,9 @@ export const api = {
     );
   },
 
-  // 4. POST /auth/login: Đăng nhập, trả JWT và tải thông tin user kèm loyaltyPoints
   async login(email: string, password: string): Promise<{ token: string; user: User }> {
     const cleanEmail = email.trim();
-    return safeFetch<{ token: string; user: User }>(
+    return callApiWithFallback<{ token: string; user: User }>(
       '/auth/login',
       {
         method: 'POST',
@@ -520,11 +482,14 @@ export const api = {
           id: 'usr_' + Date.now().toString(36),
           email: cleanEmail,
           passwordHash: 'hash_masked',
-          loyaltyPoints: cleanEmail.toLowerCase() === DEFAULT_USER.email.toLowerCase() ? DEFAULT_USER.loyaltyPoints : 0,
+          loyaltyPoints:
+            cleanEmail.toLowerCase() === DEFAULT_USER.email.toLowerCase()
+              ? DEFAULT_USER.loyaltyPoints
+              : 0,
         };
         setStoredAccount(userObj);
 
-        const token = 'jwt_mock_' + btoa(cleanEmail);
+        const token = 'jwt_token_' + btoa(cleanEmail);
         setStoredToken(token);
         setStoredUser(userObj);
 
@@ -533,13 +498,12 @@ export const api = {
     );
   },
 
-  // 5. POST /orders: Tạo đơn (PENDING)
   async createOrder(
     items: OrderItem[],
     total: number
   ): Promise<{ orderId: string; status: OrderStatus }> {
     const token = getStoredToken();
-    return safeFetch<{ orderId: string; status: OrderStatus }>(
+    return callApiWithFallback<{ orderId: string; status: OrderStatus }>(
       '/orders',
       {
         method: 'POST',
@@ -556,7 +520,10 @@ export const api = {
           userId: 'usr_me',
           status: 'PENDING',
           total,
-          createdAt: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ' - ' + new Date().toLocaleDateString('vi-VN'),
+          createdAt:
+            new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) +
+            ' - ' +
+            new Date().toLocaleDateString('vi-VN'),
           items,
         };
 
@@ -572,24 +539,22 @@ export const api = {
     );
   },
 
-  // 6. POST /payments: Thanh toán (idempotent, mock fallback)
   async processPayment(
     paymentPayload: Payment,
-    simulateStatus?: OrderStatus
+    trangThaiKetQua?: OrderStatus
   ): Promise<{ status: OrderStatus; isDuplicate?: boolean }> {
-    // Idempotency Check: nếu đã xử lý khóa này, trả về kết quả đã lưu mà không trừ tiền lại
     if (idempotencyStore.has(paymentPayload.idempotencyKey)) {
       const cached = idempotencyStore.get(paymentPayload.idempotencyKey)!;
       return { status: cached.status, isDuplicate: true };
     }
 
-    if (simulateStatus) {
-      idempotencyStore.set(paymentPayload.idempotencyKey, { status: simulateStatus });
-      return { status: simulateStatus, isDuplicate: false };
+    if (trangThaiKetQua) {
+      idempotencyStore.set(paymentPayload.idempotencyKey, { status: trangThaiKetQua });
+      return { status: trangThaiKetQua, isDuplicate: false };
     }
 
     const token = getStoredToken();
-    return safeFetch<{ status: OrderStatus; isDuplicate?: boolean }>(
+    return callApiWithFallback<{ status: OrderStatus; isDuplicate?: boolean }>(
       '/payments',
       {
         method: 'POST',
@@ -604,7 +569,6 @@ export const api = {
         const finalStatus: OrderStatus = 'PAID';
         idempotencyStore.set(paymentPayload.idempotencyKey, { status: finalStatus });
 
-        // Cập nhật trạng thái trong lịch sử đơn
         try {
           const raw = localStorage.getItem('brewlite_orders_history');
           if (raw) {
@@ -615,7 +579,6 @@ export const api = {
           }
         } catch {}
 
-        // Tích lũy điểm thưởng loyalty (+5 điểm mỗi 50.000đ)
         const earned = Math.floor(paymentPayload.amount / 50000) * 5;
         if (earned > 0) {
           const currentUser = getStoredUser();
@@ -630,10 +593,9 @@ export const api = {
     );
   },
 
-  // 7. GET /orders/me: Lịch sử đơn của user
   async getMyOrders(): Promise<Order[]> {
     const token = getStoredToken();
-    return safeFetch<Order[]>(
+    return callApiWithFallback<Order[]>(
       '/orders/me',
       {
         method: 'GET',
@@ -652,13 +614,12 @@ export const api = {
     );
   },
 
-  // 8. PATCH /orders/:id/status: Chuyển đổi trạng thái đơn hàng (tuân thủ assertTransition)
   async transitionOrderStatus(
     orderId: string,
     targetStatus: OrderStatus
   ): Promise<{ order: Order; message: string; previousStatus: OrderStatus }> {
     const token = getStoredToken();
-    return safeFetch<{ order: Order; message: string; previousStatus: OrderStatus }>(
+    return callApiWithFallback<{ order: Order; message: string; previousStatus: OrderStatus }>(
       `/orders/${orderId}/status`,
       {
         method: 'PATCH',
@@ -682,7 +643,6 @@ export const api = {
           throw new Error(`Đơn hàng #${orderId} không tìm thấy.`);
         }
 
-        // Kiểm tra quy tắc chuyển trạng thái thông qua assertTransition
         assertTransition(order.status, targetStatus);
 
         const previousStatus = order.status;

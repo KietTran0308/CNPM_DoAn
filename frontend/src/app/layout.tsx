@@ -1,14 +1,18 @@
 import type { Metadata } from 'next';
+import { LOGO } from '../hinhAnh';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'BrewLite - Ứng dụng đặt cà phê không dùng tiền mặt',
-  description:
-    'BrewLite giúp khách hàng đặt và thanh toán đồ uống không dùng tiền mặt chỉ trong vài chạm, giảm thời gian xếp hàng và nhận đơn nhanh tại quầy.',
+  title: 'BrewLite',
+  description: 'Đặt cà phê và trà trực tuyến tại BrewLite',
+  icons: {
+    icon: LOGO.favicon,
+    shortcut: LOGO.favicon,
+    apple: LOGO.favicon,
+  },
   openGraph: {
-    title: 'BrewLite - Ứng dụng đặt cà phê không dùng tiền mặt',
-    description:
-      'BrewLite giúp khách hàng đặt và thanh toán đồ uống không dùng tiền mặt chỉ trong vài chạm.',
+    title: 'BrewLite',
+    description: 'Đặt cà phê và trà trực tuyến tại BrewLite',
   },
 };
 
@@ -19,7 +23,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="vi">
-      <body className="antialiased bg-stone-100 min-h-screen text-black">
+      <body className="w-full min-h-screen antialiased bg-stone-50 text-neutral-900 selection:bg-emerald-800 selection:text-white">
         {children}
       </body>
     </html>

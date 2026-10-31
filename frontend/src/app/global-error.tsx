@@ -8,12 +8,12 @@ export default function GlobalError({
 }) {
   return (
     <html lang="vi">
-      <body className="antialiased bg-stone-100 min-h-screen text-black flex items-center justify-center p-4">
-        <div className="text-center space-y-3">
-          <h2 className="text-base font-bold">Đã xảy ra sự cố!</h2>
+      <body className="antialiased bg-stone-50 min-h-screen text-neutral-900 flex items-center justify-center p-4">
+        <div className="bg-white border border-neutral-200/80 rounded-xl p-6 text-center space-y-3 max-w-sm w-full">
+          <h2 className="text-base font-bold text-neutral-900">Đã xảy ra sự cố!</h2>
           <button
             onClick={() => reset()}
-            className="px-4 py-2 bg-emerald-800 text-white rounded text-sm font-medium"
+            className="px-4 py-2.5 bg-emerald-800 hover:bg-emerald-700 text-white rounded-lg text-sm font-medium transition-colors cursor-pointer"
           >
             Thử lại
           </button>

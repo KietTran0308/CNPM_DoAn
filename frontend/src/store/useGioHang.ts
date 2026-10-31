@@ -1,35 +1,28 @@
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { CartLine } from '../types';
 
-export interface AppliedPromo {
+export interface MaGiamGia {
   code: string;
   discount: number;
 }
 
-export interface CartState {
+export interface TrangThaiGioHang {
   cartLines: CartLine[];
-  appliedPromo: AppliedPromo | null;
+  appliedPromo: MaGiamGia | null;
   promoCodeInput: string;
   promoError: string | null;
 
-  // Actions
   addToCart: (line: CartLine) => void;
   updateCartQty: (itemId: string, delta: number) => void;
   updateCartItem: (itemId: string, updated: Partial<CartLine>) => void;
   removeCartItem: (itemId: string) => void;
   setPromoCodeInput: (code: string) => void;
   setPromoError: (error: string | null) => void;
-  applyPromo: (promo: AppliedPromo | null) => void;
+  applyPromo: (promo: MaGiamGia | null) => void;
   removePromo: () => void;
   clearCart: () => void;
 
-  // Computed helper getters
   getTotalCartCount: () => number;
   getRawSubtotal: () => number;
   getDiscountAmount: () => number;
@@ -37,7 +30,7 @@ export interface CartState {
   getProductQtyInCart: (productId: number) => number;
 }
 
-export const useCartStore = create<CartState>()(
+export const useGioHang = create<TrangThaiGioHang>()(
   persist(
     (set, get) => ({
       cartLines: [],
@@ -109,21 +102,68 @@ export const useCartStore = create<CartState>()(
       },
 
       updateCartItem: (itemId, updated) => {
-        set((state) => ({
-          cartLines: state.cartLines.map((line) => {
-            if (line.item.id === itemId) {
-              return {
-                ...line,
-                ...updated,
-                item: {
-                  ...line.item,
-                  ...(updated.item || {}),
-                },
-              };
-            }
-            return line;
-          }),
-        }));
+        set((state) => {
+          const targetIdx = state.cartLines.findIndex((l) => l.item.id === itemId);
+          if (targetIdx === -1) return state;
+
+          const existingLine = state.cartLines[targetIdx];
+          const mergedLine: CartLine = {
+            ...existingLine,
+            ...updated,
+            item: {
+              ...existingLine.item,
+              ...(updated.item || {}),
+              id: existingLine.item.id,
+              productId: updated.item?.productId || existingLine.item.productId,
+            },
+          };
+
+          if (mergedLine.item.qty <= 0) {
+            return {
+              cartLines: state.cartLines.filter((l) => l.item.id !== itemId),
+            };
+          }
+
+          const toppingsKey = [...mergedLine.toppings].sort().join(',');
+          const trimmedNote = (mergedLine.note || '').trim();
+
+          const duplicateIdx = state.cartLines.findIndex(
+            (line, idx) =>
+              idx !== targetIdx &&
+              line.item.productId === mergedLine.item.productId &&
+              line.item.size === mergedLine.item.size &&
+              [...line.toppings].sort().join(',') === toppingsKey &&
+              line.sugar === mergedLine.sugar &&
+              line.ice === mergedLine.ice &&
+              (line.note || '').trim() === trimmedNote
+          );
+
+          if (duplicateIdx > -1) {
+            const nextLines = [...state.cartLines];
+            const dupLine = nextLines[duplicateIdx];
+            const combinedQty = Math.min(dupLine.stock, dupLine.item.qty + mergedLine.item.qty);
+            nextLines[duplicateIdx] = {
+              ...dupLine,
+              item: {
+                ...dupLine.item,
+                qty: combinedQty,
+                lineTotal: dupLine.unitPrice * combinedQty,
+              },
+            };
+            nextLines.splice(targetIdx, 1);
+            return { cartLines: nextLines };
+          }
+
+          const nextLines = [...state.cartLines];
+          nextLines[targetIdx] = {
+            ...mergedLine,
+            item: {
+              ...mergedLine.item,
+              lineTotal: mergedLine.unitPrice * mergedLine.item.qty,
+            },
+          };
+          return { cartLines: nextLines };
+        });
       },
 
       removeCartItem: (itemId) => {

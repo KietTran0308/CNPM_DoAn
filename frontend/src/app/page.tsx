@@ -1,12 +1,7 @@
 'use client';
 
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import React, { useState, useEffect } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import {
   api,
   Product,
@@ -33,23 +28,22 @@ import {
   CartLine,
 } from '../types';
 
-import { EditItemModal } from '../components/EditItemModal';
-import { useCartStore } from '../store/useCartStore';
-import { AuthScreen } from '../screens/AuthScreen';
-import { MenuScreen } from '../screens/MenuScreen';
-import { ProductDetailScreen } from '../screens/ProductDetailScreen';
-import { CartScreen } from '../screens/CartScreen';
-import { CheckoutScreen } from '../screens/CheckoutScreen';
-import { SuccessScreen } from '../screens/SuccessScreen';
-import { HistoryScreen } from '../screens/HistoryScreen';
+import { ModalSuaMon } from '../components/ModalSuaMon';
+import { useGioHang } from '../store/useGioHang';
+import { QUERY_KEYS } from '../hooks/useTruyVan';
+import { DangNhap } from '../man-hinh/DangNhap';
+import { ThucDon } from '../man-hinh/ThucDon';
+import { ChiTietMon } from '../man-hinh/ChiTietMon';
+import { GioHang } from '../man-hinh/GioHang';
+import { ThanhToan } from '../man-hinh/ThanhToan';
+import { DatHangThanhCong } from '../man-hinh/DatHangThanhCong';
+import { LichSuDon } from '../man-hinh/LichSuDon';
 
+function UngDungDatNuoc() {
+  const queryClient = useQueryClient();
+  const [manHinhHienTai, setManHinhHienTai] = useState<Screen>('auth');
+  const [moMenuTaiKhoan, setMoMenuTaiKhoan] = useState(false);
 
-function BrewLiteApp() {
-  // Navigation State
-  const [currentScreen, setCurrentScreen] = useState<Screen>('auth');
-  const [menuOpen, setMenuOpen] = useState(false);
-
-  // Authentication & Loyalty State (Task 10 - User.loyaltyPoints)
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(DEFAULT_USER);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -58,11 +52,9 @@ function BrewLiteApp() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authLoading, setAuthLoading] = useState(false);
 
-  // Products State (GET /products)
   const [products, setProducts] = useState<Product[]>(DEFAULT_PRODUCTS);
   const [productsLoading, setProductsLoading] = useState(false);
 
-  // Product Detail (GET /products/:id)
   const [selectedProduct, setSelectedProduct] = useState<Product>(DEFAULT_PRODUCTS[2]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [selectedSize, setSelectedSize] = useState<SizeType>('M');
@@ -70,29 +62,28 @@ function BrewLiteApp() {
   const [selectedSugar, setSelectedSugar] = useState<SugarType>('100%');
   const [selectedIce, setSelectedIce] = useState<IceType>('100%');
   const [customerNote, setCustomerNote] = useState('');
+  const [selectedQty, setSelectedQty] = useState(1);
   const [addingToCart, setAddingToCart] = useState(false);
   const [stockNotice, setStockNotice] = useState<string | null>(null);
 
-  // Cart State (Zustand Store with localStorage persistence)
-  const cartLines = useCartStore((s) => s.cartLines);
-  const appliedPromo = useCartStore((s) => s.appliedPromo);
-  const promoCodeInput = useCartStore((s) => s.promoCodeInput);
-  const promoError = useCartStore((s) => s.promoError);
-  const setPromoCodeInput = useCartStore((s) => s.setPromoCodeInput);
-  const setPromoError = useCartStore((s) => s.setPromoError);
-  const applyPromo = useCartStore((s) => s.applyPromo);
-  const removePromo = useCartStore((s) => s.removePromo);
-  const clearCart = useCartStore((s) => s.clearCart);
-  const addLineToCart = useCartStore((s) => s.addToCart);
-  const updateLineQty = useCartStore((s) => s.updateCartQty);
-  const updateLineItem = useCartStore((s) => s.updateCartItem);
-  const removeLineItem = useCartStore((s) => s.removeCartItem);
-  const totalCartCount = useCartStore((s) => s.getTotalCartCount());
-  const rawSubtotal = useCartStore((s) => s.getRawSubtotal());
-  const discountAmount = useCartStore((s) => s.getDiscountAmount());
-  const totalCartPrice = useCartStore((s) => s.getTotalCartPrice());
+  const cartLines = useGioHang((s) => s.cartLines);
+  const appliedPromo = useGioHang((s) => s.appliedPromo);
+  const promoCodeInput = useGioHang((s) => s.promoCodeInput);
+  const promoError = useGioHang((s) => s.promoError);
+  const setPromoCodeInput = useGioHang((s) => s.setPromoCodeInput);
+  const setPromoError = useGioHang((s) => s.setPromoError);
+  const applyPromo = useGioHang((s) => s.applyPromo);
+  const removePromo = useGioHang((s) => s.removePromo);
+  const clearCart = useGioHang((s) => s.clearCart);
+  const addLineToCart = useGioHang((s) => s.addToCart);
+  const updateLineQty = useGioHang((s) => s.updateCartQty);
+  const updateLineItem = useGioHang((s) => s.updateCartItem);
+  const removeLineItem = useGioHang((s) => s.removeCartItem);
+  const totalCartCount = useGioHang((s) => s.getTotalCartCount());
+  const rawSubtotal = useGioHang((s) => s.getRawSubtotal());
+  const discountAmount = useGioHang((s) => s.getDiscountAmount());
+  const totalCartPrice = useGioHang((s) => s.getTotalCartPrice());
 
-  // Checkout State & Stock Check
   const [paymentMethod, setPaymentMethod] = useState<'wallet' | 'bank'>('wallet');
   const [walletType, setWalletType] = useState<'MoMo' | 'VNPay'>('MoMo');
   const [cardNumber, setCardNumber] = useState('9704 1985 2468 1234');
@@ -102,10 +93,9 @@ function BrewLiteApp() {
   const [checkoutStatus, setCheckoutStatus] = useState<OrderStatus | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [stockError, setStockError] = useState<string | null>(null);
-  const [simulateWalletError, setSimulateWalletError] = useState(false);
 
-  // Edit Cart Item State (Task: Chỉnh sửa sản phẩm trực tiếp trong Giỏ hàng)
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editProductId, setEditProductId] = useState<number>(0);
   const [editProductName, setEditProductName] = useState('');
   const [editBasePrice, setEditBasePrice] = useState(0);
   const [editSize, setEditSize] = useState<SizeType>('M');
@@ -114,12 +104,10 @@ function BrewLiteApp() {
   const [editIce, setEditIce] = useState<IceType>('100%');
   const [editNote, setEditNote] = useState('');
   const [editQty, setEditQty] = useState(1);
+  const [editMaxStock, setEditMaxStock] = useState(50);
   const [editSuccessToast, setEditSuccessToast] = useState(false);
 
-  // Confirmation State
   const [lastOrder, setLastOrder] = useState<Order | null>(null);
-
-  // Order History State (GET /orders/me)
   const [orderHistory, setOrderHistory] = useState<Order[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [statusNotice, setStatusNotice] = useState<{
@@ -128,7 +116,6 @@ function BrewLiteApp() {
     orderId?: string;
   } | null>(null);
 
-  // Check initial token and user
   useEffect(() => {
     const existing = getStoredToken();
     const storedUser = getStoredUser();
@@ -139,15 +126,14 @@ function BrewLiteApp() {
     }
     if (existing) {
       setToken(existing);
-      setCurrentScreen('menu');
-      fetchProducts();
+      setManHinhHienTai('menu');
+      taiDanhSachMon();
     } else {
-      setCurrentScreen('auth');
+      setManHinhHienTai('auth');
     }
   }, []);
 
-  // 1. GET /products
-  const fetchProducts = async () => {
+  const taiDanhSachMon = async () => {
     setProductsLoading(true);
     try {
       const data = await api.getProducts();
@@ -159,16 +145,16 @@ function BrewLiteApp() {
     }
   };
 
-  // 2. GET /products/:id
-  const openProductDetail = async (productId: number) => {
+  const moChiTietMon = async (productId: number) => {
     setStockNotice(null);
     setDetailLoading(true);
-    setCurrentScreen('product-detail');
+    setManHinhHienTai('product-detail');
     setSelectedSize('S');
     setSelectedToppings([]);
     setSelectedSugar('100%');
     setSelectedIce('100%');
     setCustomerNote('');
+    setSelectedQty(1);
     setAddingToCart(false);
 
     try {
@@ -177,27 +163,23 @@ function BrewLiteApp() {
         setSelectedProduct(product);
       }
     } catch {
-      // Fallback
     } finally {
       setDetailLoading(false);
     }
   };
 
-  // 7. GET /orders/me
-  const fetchHistory = async () => {
+  const taiLichSuDon = async () => {
     setHistoryLoading(true);
     try {
       const data = await api.getMyOrders();
       setOrderHistory(data || []);
     } catch {
-      // fallback
     } finally {
       setHistoryLoading(false);
     }
   };
 
-  // Save updated orders into localStorage and state
-  const syncOrderHistory = (updater: (prev: Order[]) => Order[]) => {
+  const capNhatLichSuDon = (updater: (prev: Order[]) => Order[]) => {
     setOrderHistory((prev) => {
       const updated = updater(prev);
       try {
@@ -207,14 +189,13 @@ function BrewLiteApp() {
     });
   };
 
-  // --- Auth Handlers ---
-  const handleAuthSubmit = async (e: React.FormEvent) => {
+  const xuLyDangNhapDangKy = async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError(null);
 
     const emailTrimmed = authEmail.trim();
     if (!emailTrimmed || !authPassword.trim()) {
-      setAuthError('Vui lòng nhập đầy đủ Email và Password.');
+      setAuthError('Vui lòng nhập đầy đủ Email và Mật khẩu.');
       return;
     }
 
@@ -248,8 +229,8 @@ function BrewLiteApp() {
         };
         setUser(loggedUser);
         setStoredUser(loggedUser);
-        setCurrentScreen('menu');
-        fetchProducts();
+        setManHinhHienTai('menu');
+        taiDanhSachMon();
       } else {
         setAuthError('Xác thực không thành công.');
       }
@@ -260,23 +241,22 @@ function BrewLiteApp() {
     }
   };
 
-  const handleLogout = () => {
+  const xuLyDangXuat = () => {
     setToken(null);
     setStoredToken(null);
     setUser(null);
     setStoredUser(null);
-    setMenuOpen(false);
-    setCurrentScreen('auth');
+    setMoMenuTaiKhoan(false);
+    setManHinhHienTai('auth');
   };
 
-  // --- Customization Helpers ---
-  const getSizeExtra = (size: SizeType): number => {
+  const tinhGiaSize = (size: SizeType): number => {
     if (size === 'M') return 5000;
     if (size === 'L') return 10000;
     return 0;
   };
 
-  const getToppingsExtra = (toppings: ToppingType[]): number => {
+  const tinhGiaTopping = (toppings: ToppingType[]): number => {
     return toppings.reduce((sum, t) => {
       if (t === 'Trân châu') return sum + 5000;
       if (t === 'Kem') return sum + 10000;
@@ -284,27 +264,53 @@ function BrewLiteApp() {
     }, 0);
   };
 
-  const currentUnitPrice =
-    selectedProduct.price + getSizeExtra(selectedSize) + getToppingsExtra(selectedToppings);
+  const donGiaHienTai =
+    selectedProduct.price + tinhGiaSize(selectedSize) + tinhGiaTopping(selectedToppings);
 
-  const toggleTopping = (topping: ToppingType) => {
+  const chonTopping = (topping: ToppingType) => {
     setSelectedToppings((prev) =>
       prev.includes(topping) ? prev.filter((t) => t !== topping) : [...prev, topping]
     );
   };
 
-  const getProductTotalInCart = (productId: number): number => {
+  const laySoLuongMonTrongGio = (productId: number): number => {
     return cartLines
       .filter((line) => line.item.productId === productId)
       .reduce((sum, line) => sum + line.item.qty, 0);
   };
 
-  // --- Cart Handlers ---
-  const handleAddToCart = () => {
+  const xuLyThemNhanhVaoGio = (product: Product) => {
+    const soLuongHienCo = laySoLuongMonTrongGio(product.id);
+    if (soLuongHienCo + 1 > product.stock) return;
+
+    const newItem: OrderItem = {
+      id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+      orderId: '',
+      productId: product.id,
+      size: 'S',
+      qty: 1,
+      lineTotal: product.price,
+      sugar: '100%',
+      ice: '100%',
+    };
+    const newCartLine: CartLine = {
+      item: newItem,
+      productName: product.name,
+      toppings: [],
+      sugar: '100%',
+      ice: '100%',
+      unitPrice: product.price,
+      stock: product.stock,
+    };
+    addLineToCart(newCartLine);
+  };
+
+  const xuLyThemVaoGio = () => {
     setStockNotice(null);
 
-    const currentQtyInCart = getProductTotalInCart(selectedProduct.id);
-    if (currentQtyInCart + 1 > selectedProduct.stock) {
+    const qtyToAdd = Math.max(1, selectedQty);
+    const currentQtyInCart = laySoLuongMonTrongGio(selectedProduct.id);
+    if (currentQtyInCart + qtyToAdd > selectedProduct.stock) {
       setStockNotice(`Số lượng món đã đạt mức tồn kho tối đa (${selectedProduct.stock}).`);
       return;
     }
@@ -318,8 +324,8 @@ function BrewLiteApp() {
         orderId: '',
         productId: selectedProduct.id,
         size: selectedSize,
-        qty: 1,
-        lineTotal: currentUnitPrice,
+        qty: qtyToAdd,
+        lineTotal: donGiaHienTai * qtyToAdd,
         sugar: selectedSugar,
         ice: selectedIce,
         note: trimmedNote || undefined,
@@ -331,29 +337,28 @@ function BrewLiteApp() {
         sugar: selectedSugar,
         ice: selectedIce,
         note: trimmedNote || undefined,
-        unitPrice: currentUnitPrice,
+        unitPrice: donGiaHienTai,
         stock: selectedProduct.stock,
       };
       addLineToCart(newCartLine);
 
       setAddingToCart(false);
-      setCurrentScreen('cart');
-    }, 500);
+      setManHinhHienTai('menu');
+    }, 300);
   };
 
-  const updateCartQty = (itemId: string, delta: number) => {
-    updateLineQty(itemId, delta);
-  };
-
-  const removeCartItem = (itemId: string) => {
-    removeLineItem(itemId);
-  };
-
-  // Mở modal chỉnh sửa món trong giỏ hàng (Yêu cầu bổ sung)
-  const handleOpenEditModal = (line: CartLine) => {
+  const moModalSuaMon = (line: CartLine) => {
     const prod = products.find((p) => p.id === line.item.productId);
-    const basePrice = prod ? prod.price : line.unitPrice;
+    const basePrice = prod
+      ? prod.price
+      : Math.max(
+          0,
+          line.unitPrice -
+            tinhGiaSize((line.item.size as SizeType) || 'S') -
+            tinhGiaTopping(line.toppings)
+        );
     setEditingItemId(line.item.id);
+    setEditProductId(line.item.productId);
     setEditProductName(line.productName);
     setEditBasePrice(basePrice);
     setEditSize((line.item.size as SizeType) || 'M');
@@ -362,26 +367,27 @@ function BrewLiteApp() {
     setEditIce((line.ice as IceType) || '100%');
     setEditNote(line.note || '');
     setEditQty(line.item.qty);
+    setEditMaxStock(prod ? prod.stock : line.stock);
   };
 
-  const handleToggleEditTopping = (topping: ToppingType) => {
+  const chonToppingKhiSua = (topping: ToppingType) => {
     setEditToppings((prev) =>
       prev.includes(topping) ? prev.filter((t) => t !== topping) : [...prev, topping]
     );
   };
 
-  const editUnitPrice = editBasePrice + getSizeExtra(editSize) + getToppingsExtra(editToppings);
+  const donGiaSauKhiSua = editBasePrice + tinhGiaSize(editSize) + tinhGiaTopping(editToppings);
 
-  const handleSaveEditedCartItem = () => {
+  const luuMonDaSuaTrongGio = () => {
     if (!editingItemId) return;
-    const newUnitPrice = editUnitPrice;
+    const newUnitPrice = donGiaSauKhiSua;
     const newLineTotal = newUnitPrice * editQty;
 
     updateLineItem(editingItemId, {
       item: {
         id: editingItemId,
         orderId: '',
-        productId: selectedProduct?.id || 0,
+        productId: editProductId,
         size: editSize,
         qty: editQty,
         lineTotal: newLineTotal,
@@ -401,7 +407,6 @@ function BrewLiteApp() {
     setTimeout(() => setEditSuccessToast(false), 2000);
   };
 
-  // Tự động kiểm tra điều kiện mã GIAM10K khi số lượng món trong giỏ thay đổi
   useEffect(() => {
     if (appliedPromo?.code === 'GIAM10K' && rawSubtotal < 30000 && rawSubtotal > 0) {
       applyPromo(null);
@@ -409,8 +414,7 @@ function BrewLiteApp() {
     }
   }, [rawSubtotal, appliedPromo, applyPromo, setPromoError]);
 
-  // Xử lý áp dụng mã giảm giá
-  const handleApplyPromo = (e: React.FormEvent) => {
+  const xuLyApMaGiamGia = (e: React.FormEvent) => {
     e.preventDefault();
     setPromoError(null);
     const code = promoCodeInput.trim().toUpperCase();
@@ -430,18 +434,13 @@ function BrewLiteApp() {
     }
   };
 
-  const handleRemovePromo = () => {
-    removePromo();
-  };
-
-  // Bank Card Input Formatter
-  const handleCardNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const xuLyNhapSoThe = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value.replace(/\D/g, '').slice(0, 16);
     const formatted = raw.match(/.{1,4}/g)?.join(' ') || raw;
     setCardNumber(formatted);
   };
 
-  const handleExpiryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const xuLyNhapHanThe = (e: React.ChangeEvent<HTMLInputElement>) => {
     let raw = e.target.value.replace(/\D/g, '').slice(0, 4);
     if (raw.length >= 3) {
       raw = `${raw.slice(0, 2)}/${raw.slice(2)}`;
@@ -449,13 +448,12 @@ function BrewLiteApp() {
     setCardExpiry(raw);
   };
 
-  const handleCvvChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const xuLyNhapCvv = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value.replace(/\D/g, '').slice(0, 3);
     setCardCvv(raw);
   };
 
-  // Helper to format date as HH:mm - DD/MM/YYYY
-  const formatOrderDate = (d: Date = new Date()) => {
+  const dinhDangThoiGian = (d: Date = new Date()) => {
     const pad = (n: number) => String(n).padStart(2, '0');
     const hh = pad(d.getHours());
     const mm = pad(d.getMinutes());
@@ -465,13 +463,11 @@ function BrewLiteApp() {
     return `${hh}:${mm} - ${DD}/${MM}/${YYYY}`;
   };
 
-  // Handle "Xác nhận trả" (Task 10: Idempotent Payment, Stock Check, Loyalty Points)
-  const handleConfirmPay = async () => {
+  const xuLyXacNhanThanhToan = async () => {
     if (cartLines.length === 0) return;
     setCheckoutLoading(true);
     setStockError(null);
 
-    // 1. Kiểm soát tồn kho (Product.stock) trước khi tạo đơn/thanh toán
     for (const line of cartLines) {
       const prod = products.find((p) => p.id === line.item.productId);
       if (!prod || line.item.qty > prod.stock) {
@@ -484,9 +480,8 @@ function BrewLiteApp() {
     try {
       let orderId = currentPendingOrderId;
       const orderItems: OrderItem[] = cartLines.map((line) => line.item);
-      const createdAtFormatted = formatOrderDate();
+      const createdAtFormatted = dinhDangThoiGian();
 
-      // 2. POST /orders: Tạo đơn ở trạng thái PENDING nếu chưa có (dùng total sau giảm giá)
       if (!orderId) {
         const orderRes = await api.createOrder(orderItems, totalCartPrice);
         orderId = orderRes.orderId;
@@ -500,10 +495,9 @@ function BrewLiteApp() {
           createdAt: createdAtFormatted,
           items: orderItems,
         };
-        syncOrderHistory((prev) => [pendingOrder, ...prev.filter((o) => o.id !== orderId)]);
+        capNhatLichSuDon((prev) => [pendingOrder, ...prev.filter((o) => o.id !== orderId)]);
       }
 
-      // 3. Thanh toán Idempotent (Idempotency-Key)
       const idempotencyKey =
         'idemp_' + orderId + '_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
 
@@ -520,18 +514,13 @@ function BrewLiteApp() {
         method: methodString,
       };
 
-      // Quy ước lỗi thông minh: Nếu thẻ có đuôi "0000" hoặc bật giả lập lỗi ví điện tử -> PAYMENT_FAILED
       const cleanCardDigits = cardNumber.replace(/\D/g, '');
-      const isSimulatedCardError = paymentMethod === 'bank' && cleanCardDigits.endsWith('0000');
-      const isSimulatedWalletFail = paymentMethod === 'wallet' && simulateWalletError;
+      const loiTheNganHang = paymentMethod === 'bank' && cleanCardDigits.endsWith('0000');
 
-      const targetStatus: OrderStatus = (isSimulatedCardError || isSimulatedWalletFail)
-        ? 'PAYMENT_FAILED'
-        : 'PAID';
+      const targetStatus: OrderStatus = loiTheNganHang ? 'PAYMENT_FAILED' : 'PAID';
       const payRes = await api.processPayment(paymentPayload, targetStatus);
 
       if (payRes.status === 'PAID') {
-        // SUCCESS: PENDING -> PAID
         const paidOrder: Order = {
           id: orderId,
           userId: user?.id || 'usr_me',
@@ -541,13 +530,14 @@ function BrewLiteApp() {
           items: orderItems,
         };
 
-        syncOrderHistory((prev) =>
-          prev.map((o) => (o.id === orderId ? { ...o, status: 'PAID', items: o.items || orderItems } : o))
+        capNhatLichSuDon((prev) =>
+          prev.map((o) =>
+            o.id === orderId ? { ...o, status: 'PAID', items: o.items || orderItems } : o
+          )
         );
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.lichSuDon });
 
-        // Chỉ trừ tồn kho và cộng điểm nếu không phải request gửi trùng lặp
         if (!payRes.isDuplicate) {
-          // Trừ số lượng tồn kho của các sản phẩm tương ứng
           setProducts((prev) =>
             prev.map((p) => {
               const matchedLine = cartLines.find((l) => l.item.productId === p.id);
@@ -558,7 +548,6 @@ function BrewLiteApp() {
             })
           );
 
-          // Tích điểm thưởng loyaltyPoints: Cứ mỗi 10.000đ = 1 điểm (làm tròn xuống)
           const earnedPoints = Math.floor(totalCartPrice / 10000);
           if (user && earnedPoints > 0) {
             const updatedUser: User = {
@@ -571,20 +560,19 @@ function BrewLiteApp() {
         }
 
         setLastOrder(paidOrder);
-        clearCart(); // Dọn sạch giỏ hàng & reset khuyến mãi qua Zustand store
+        clearCart();
         setCurrentPendingOrderId(null);
         setCheckoutStatus(null);
-        setCurrentScreen('success');
+        setManHinhHienTai('success');
       } else {
-        // FAILURE: PENDING -> PAYMENT_FAILED (giỏ hàng được giữ nguyên, không trừ tồn kho, không cộng điểm)
-        syncOrderHistory((prev) =>
+        capNhatLichSuDon((prev) =>
           prev.map((o) => (o.id === orderId ? { ...o, status: 'PAYMENT_FAILED' } : o))
         );
         setCheckoutStatus('PAYMENT_FAILED');
       }
     } catch {
       if (currentPendingOrderId) {
-        syncOrderHistory((prev) =>
+        capNhatLichSuDon((prev) =>
           prev.map((o) => (o.id === currentPendingOrderId ? { ...o, status: 'PAYMENT_FAILED' } : o))
         );
       }
@@ -594,35 +582,32 @@ function BrewLiteApp() {
     }
   };
 
-  // From PAYMENT_FAILED: "Thử lại" -> quay về PENDING rồi thanh toán lại
-  const handleRetryPayment = () => {
+  const xuLyThuLaiThanhToan = () => {
     if (!currentPendingOrderId) return;
 
-    syncOrderHistory((prev) =>
+    capNhatLichSuDon((prev) =>
       prev.map((o) => (o.id === currentPendingOrderId ? { ...o, status: 'PENDING' } : o))
     );
-    setCheckoutStatus(null); // Cho phép người dùng chỉnh lại số thẻ hoặc bấm trả lại
+    setCheckoutStatus(null);
   };
 
-  // From PAYMENT_FAILED: "Hủy" -> CANCELLED
-  const handleCancelCurrentOrder = () => {
+  const xuLyHuyDonDangThanhToan = () => {
     if (currentPendingOrderId) {
-      syncOrderHistory((prev) =>
+      capNhatLichSuDon((prev) =>
         prev.map((o) => (o.id === currentPendingOrderId ? { ...o, status: 'CANCELLED' } : o))
       );
     }
     setCurrentPendingOrderId(null);
     setCheckoutStatus(null);
-    setCurrentScreen('cart');
+    setManHinhHienTai('cart');
   };
 
-  const handleHistoryTransition = async (orderId: string, targetStatus: OrderStatus) => {
+  const xuLyChuyenTrangThaiDon = async (orderId: string, targetStatus: OrderStatus) => {
     const order =
       orderHistory.find((o) => o.id === orderId) ||
       (lastOrder?.id === orderId ? lastOrder : null);
     if (!order) return;
 
-    // Kiểm tra quy tắc chuyển trạng thái thông qua assertTransition (Task 10)
     try {
       assertTransition(order.status, targetStatus);
     } catch {
@@ -630,8 +615,7 @@ function BrewLiteApp() {
     }
 
     if (targetStatus === 'PENDING') {
-      // Retry payment from history: PENDING -> PAID
-      syncOrderHistory((prev) =>
+      capNhatLichSuDon((prev) =>
         prev.map((o) => (o.id === orderId ? { ...o, status: 'PENDING' } : o))
       );
       if (lastOrder?.id === orderId) {
@@ -651,14 +635,13 @@ function BrewLiteApp() {
       try {
         const res = await api.processPayment(payload, 'PAID');
         if (res.status === 'PAID') {
-          syncOrderHistory((prev) =>
+          capNhatLichSuDon((prev) =>
             prev.map((o) => (o.id === orderId ? { ...o, status: 'PAID' } : o))
           );
           if (lastOrder?.id === orderId) {
             setLastOrder({ ...lastOrder, status: 'PAID' });
           }
           if (!res.isDuplicate) {
-            // Trừ tồn kho và cộng điểm
             if (order.items) {
               setProducts((prev) =>
                 prev.map((p) => {
@@ -679,11 +662,11 @@ function BrewLiteApp() {
           }
           setStatusNotice({
             type: 'success',
-            message: `Đơn hàng #${orderId} đã được thanh toán thành công (PAID).`,
+            message: `Đơn hàng #${orderId} đã được thanh toán thành công.`,
             orderId,
           });
         } else {
-          syncOrderHistory((prev) =>
+          capNhatLichSuDon((prev) =>
             prev.map((o) => (o.id === orderId ? { ...o, status: 'PAYMENT_FAILED' } : o))
           );
           if (lastOrder?.id === orderId) {
@@ -696,7 +679,7 @@ function BrewLiteApp() {
           });
         }
       } catch {
-        syncOrderHistory((prev) =>
+        capNhatLichSuDon((prev) =>
           prev.map((o) => (o.id === orderId ? { ...o, status: 'PAYMENT_FAILED' } : o))
         );
         if (lastOrder?.id === orderId) {
@@ -709,8 +692,6 @@ function BrewLiteApp() {
         });
       }
     } else {
-      // Chuyển sang trạng thái khác (PREPARING, READY, COMPLETED, CANCELLED)
-      // Nếu hủy đơn hàng đã PAID -> hoàn lại điểm thưởng và tồn kho
       if (order.status === 'PAID' && targetStatus === 'CANCELLED') {
         const pointsToRevert = Math.floor(order.total / 10000);
         if (user && pointsToRevert > 0) {
@@ -731,14 +712,14 @@ function BrewLiteApp() {
         }
       }
 
-      syncOrderHistory((prev) =>
+      capNhatLichSuDon((prev) =>
         prev.map((o) => (o.id === orderId ? { ...o, status: targetStatus } : o))
       );
       if (lastOrder?.id === orderId) {
         setLastOrder({ ...lastOrder, status: targetStatus });
       }
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.lichSuDon });
 
-      // Thông báo phản hồi kết quả chuyển trạng thái
       if (targetStatus === 'READY') {
         setStatusNotice({
           type: 'ready',
@@ -748,36 +729,30 @@ function BrewLiteApp() {
       } else if (targetStatus === 'PREPARING') {
         setStatusNotice({
           type: 'success',
-          message: `Đơn hàng #${orderId} đã được quầy tiếp nhận và đang tiến hành pha chế (PREPARING).`,
+          message: `Đơn hàng #${orderId} đã được quầy tiếp nhận và đang tiến hành pha chế.`,
           orderId,
         });
       } else if (targetStatus === 'COMPLETED') {
         setStatusNotice({
           type: 'success',
-          message: `Đơn hàng #${orderId} đã được bàn giao thành công (COMPLETED).`,
+          message: `Đơn hàng #${orderId} đã được bàn giao hoàn tất.`,
           orderId,
         });
       } else if (targetStatus === 'CANCELLED') {
         setStatusNotice({
           type: 'success',
-          message: `Đơn hàng #${orderId} đã được hủy bỏ thành công (CANCELLED).`,
+          message: `Đơn hàng #${orderId} đã được hủy thành công.`,
           orderId,
         });
       }
     }
   };
 
-  // ==========================================
-  // RENDER WIREFRAME SCREENS
-  // ==========================================
-
   return (
-    <div className="min-h-screen bg-white text-black font-sans flex flex-col justify-center items-center p-2 sm:p-6">
-      {/* Viewport Wireframe Container: Responsive Mobile (1 cột) / Tablet / Desktop */}
-      <div className="w-full max-w-[380px] md:max-w-xl lg:max-w-2xl border border-gray-400 rounded-3xl p-4 sm:p-6 flex flex-col justify-between min-h-[580px] relative bg-white">
-        {/* MÀN HÌNH 1: ĐĂNG NHẬP / ĐĂNG KÝ (/auth) */}
-        {currentScreen === 'auth' && (
-          <AuthScreen
+    <div className="w-full min-h-screen bg-stone-50 text-neutral-900 font-sans flex flex-col">
+      <main className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 flex-1 flex flex-col relative">
+        {manHinhHienTai === 'auth' && (
+          <DangNhap
             authMode={authMode}
             setAuthMode={setAuthMode}
             authEmail={authEmail}
@@ -787,32 +762,31 @@ function BrewLiteApp() {
             authError={authError}
             setAuthError={setAuthError}
             authLoading={authLoading}
-            onAuthSubmit={handleAuthSubmit}
+            onAuthSubmit={xuLyDangNhapDangKy}
           />
         )}
 
-        {/* MÀN HÌNH 2: TRANG MENU (/) */}
-        {currentScreen === 'menu' && (
-          <MenuScreen
+        {manHinhHienTai === 'menu' && (
+          <ThucDon
             user={user}
-            menuOpen={menuOpen}
-            setMenuOpen={setMenuOpen}
+            menuOpen={moMenuTaiKhoan}
+            setMenuOpen={setMoMenuTaiKhoan}
             onNavigateHistory={() => {
-              fetchHistory();
-              setCurrentScreen('history');
+              taiLichSuDon();
+              setManHinhHienTai('history');
             }}
-            onLogout={handleLogout}
+            onLogout={xuLyDangXuat}
             products={products}
             productsLoading={productsLoading}
-            onOpenProductDetail={openProductDetail}
+            onOpenProductDetail={moChiTietMon}
             totalCartCount={totalCartCount}
-            onViewCart={() => setCurrentScreen('cart')}
+            onViewCart={() => setManHinhHienTai('cart')}
+            onQuickAddProduct={xuLyThemNhanhVaoGio}
           />
         )}
 
-        {/* MÀN HÌNH 3: CHI TIẾT SẢN PHẨM (/products/:id) */}
-        {currentScreen === 'product-detail' && (
-          <ProductDetailScreen
+        {manHinhHienTai === 'product-detail' && (
+          <ChiTietMon
             selectedProduct={selectedProduct}
             user={user}
             detailLoading={detailLoading}
@@ -820,23 +794,24 @@ function BrewLiteApp() {
             selectedSize={selectedSize}
             setSelectedSize={setSelectedSize}
             selectedToppings={selectedToppings}
-            toggleTopping={toggleTopping}
+            toggleTopping={chonTopping}
             selectedSugar={selectedSugar}
             setSelectedSugar={setSelectedSugar}
             selectedIce={selectedIce}
             setSelectedIce={setSelectedIce}
             customerNote={customerNote}
             setCustomerNote={setCustomerNote}
-            currentUnitPrice={currentUnitPrice}
+            selectedQty={selectedQty}
+            setSelectedQty={setSelectedQty}
+            currentUnitPrice={donGiaHienTai}
             addingToCart={addingToCart}
-            onAddToCart={handleAddToCart}
-            onBack={() => setCurrentScreen('menu')}
+            onAddToCart={xuLyThemVaoGio}
+            onBack={() => setManHinhHienTai('menu')}
           />
         )}
 
-        {/* MÀN HÌNH 4: GIỎ HÀNG (/cart) */}
-        {currentScreen === 'cart' && (
-          <CartScreen
+        {manHinhHienTai === 'cart' && (
+          <GioHang
             cartLines={cartLines}
             user={user}
             editSuccessToast={editSuccessToast}
@@ -848,22 +823,22 @@ function BrewLiteApp() {
             rawSubtotal={rawSubtotal}
             discountAmount={discountAmount}
             totalCartPrice={totalCartPrice}
-            onBack={() => setCurrentScreen('menu')}
-            onOpenEditModal={handleOpenEditModal}
-            onUpdateCartQty={updateCartQty}
-            onRemoveCartItem={removeCartItem}
-            onApplyPromo={handleApplyPromo}
-            onRemovePromo={handleRemovePromo}
+            onBack={() => setManHinhHienTai('menu')}
+            onOpenEditModal={moModalSuaMon}
+            onUpdateCartQty={updateLineQty}
+            onRemoveCartItem={removeLineItem}
+            onClearCart={clearCart}
+            onApplyPromo={xuLyApMaGiamGia}
+            onRemovePromo={removePromo}
             onCheckout={() => {
               setCheckoutStatus(null);
-              setCurrentScreen('checkout');
+              setManHinhHienTai('checkout');
             }}
           />
         )}
 
-        {/* MÀN HÌNH 5: THANH TOÁN (/checkout) */}
-        {currentScreen === 'checkout' && (
-          <CheckoutScreen
+        {manHinhHienTai === 'checkout' && (
+          <ThanhToan
             user={user}
             totalCartPrice={totalCartPrice}
             cartLines={cartLines}
@@ -878,69 +853,64 @@ function BrewLiteApp() {
             cardNumber={cardNumber}
             cardExpiry={cardExpiry}
             cardCvv={cardCvv}
-            onCardNumberChange={handleCardNumberChange}
-            onExpiryChange={handleExpiryChange}
-            onCvvChange={handleCvvChange}
-            onBackToCart={() => setCurrentScreen('cart')}
-            onRetryPayment={handleRetryPayment}
-            onCancelCurrentOrder={handleCancelCurrentOrder}
-            onConfirmPay={handleConfirmPay}
-            simulateWalletError={simulateWalletError}
-            setSimulateWalletError={setSimulateWalletError}
+            onCardNumberChange={xuLyNhapSoThe}
+            onExpiryChange={xuLyNhapHanThe}
+            onCvvChange={xuLyNhapCvv}
+            onBackToCart={() => setManHinhHienTai('cart')}
+            onRetryPayment={xuLyThuLaiThanhToan}
+            onCancelCurrentOrder={xuLyHuyDonDangThanhToan}
+            onConfirmPay={xuLyXacNhanThanhToan}
           />
         )}
 
-        {/* MÀN HÌNH 6: XÁC NHẬN (/orders/success) */}
-        {currentScreen === 'success' && (
-          <SuccessScreen
+        {manHinhHienTai === 'success' && (
+          <DatHangThanhCong
             lastOrder={lastOrder}
             user={user}
             onBackToMenu={() => {
               setStatusNotice(null);
-              setCurrentScreen('menu');
+              setManHinhHienTai('menu');
             }}
             onViewHistory={() => {
-              fetchHistory();
-              setCurrentScreen('history');
+              taiLichSuDon();
+              setManHinhHienTai('history');
             }}
-            onTransitionOrder={handleHistoryTransition}
+            onTransitionOrder={xuLyChuyenTrangThaiDon}
             statusNotice={statusNotice}
             onClearNotice={() => setStatusNotice(null)}
           />
         )}
 
-        {/* MÀN HÌNH LỊCH SỬ ĐƠN HÀNG (/orders/history) */}
-        {currentScreen === 'history' && (
-          <HistoryScreen
+        {manHinhHienTai === 'history' && (
+          <LichSuDon
             user={user}
             orderHistory={orderHistory}
             historyLoading={historyLoading}
             products={products}
             onBackToMenu={() => {
               setStatusNotice(null);
-              setCurrentScreen('menu');
+              setManHinhHienTai('menu');
             }}
-            onTransition={handleHistoryTransition}
+            onTransition={xuLyChuyenTrangThaiDon}
             onRetryFromHistory={(orderId) => {
               setStatusNotice(null);
               setCurrentPendingOrderId(orderId);
               setCheckoutStatus(null);
-              setCurrentScreen('checkout');
+              setManHinhHienTai('checkout');
             }}
             statusNotice={statusNotice}
             onClearNotice={() => setStatusNotice(null)}
           />
         )}
 
-        {/* MODAL CHỈNH SỬA SẢN PHẨM TRONG GIỎ HÀNG */}
-        <EditItemModal
+        <ModalSuaMon
           editingItemId={editingItemId}
           editProductName={editProductName}
           editBasePrice={editBasePrice}
           editSize={editSize}
           setEditSize={setEditSize}
           editToppings={editToppings}
-          onToggleEditTopping={handleToggleEditTopping}
+          onToggleEditTopping={chonToppingKhiSua}
           editSugar={editSugar}
           setEditSugar={setEditSugar}
           editIce={editIce}
@@ -948,12 +918,14 @@ function BrewLiteApp() {
           editNote={editNote}
           setEditNote={setEditNote}
           editQty={editQty}
-          editUnitPrice={editUnitPrice}
-          getSizeExtra={getSizeExtra}
+          setEditQty={setEditQty}
+          editMaxStock={editMaxStock}
+          editUnitPrice={donGiaSauKhiSua}
+          getSizeExtra={tinhGiaSize}
           onClose={() => setEditingItemId(null)}
-          onSave={handleSaveEditedCartItem}
+          onSave={luuMonDaSuaTrongGio}
         />
-      </div>
+      </main>
     </div>
   );
 }
@@ -973,8 +945,7 @@ export default function Home() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <BrewLiteApp />
+      <UngDungDatNuoc />
     </QueryClientProvider>
   );
 }
-
