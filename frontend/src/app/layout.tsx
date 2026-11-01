@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { LOGO } from '../hinhAnh';
+import { LOGO, BACKGROUND } from '../hinhAnh';
 import './globals.css';
 
 export const metadata: Metadata = {
@@ -23,9 +23,18 @@ export default function RootLayout({
 }) {
   return (
     <html lang="vi">
-      <body className="w-full min-h-screen antialiased bg-stone-50 text-neutral-900 selection:bg-emerald-800 selection:text-white">
+      <body
+        style={{
+          backgroundImage: `url('${BACKGROUND}')`,
+          backgroundSize: '100% auto',
+          backgroundPosition: 'top center',
+          backgroundRepeat: 'repeat-y',
+        }}
+        className="w-full min-h-screen antialiased bg-[#124E35] text-neutral-900 selection:bg-[#124E35] selection:text-[#F5F0E1]"
+      >
         {children}
       </body>
     </html>
   );
 }
+

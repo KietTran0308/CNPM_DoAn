@@ -51,13 +51,13 @@ export const ModalSuaMon: React.FC<ModalSuaMonProps> = ({
 
   return (
     <div className="fixed inset-0 bg-neutral-900/40 z-50 p-4 sm:p-6 flex items-center justify-center">
-      <div className="bg-white border border-neutral-200/80 rounded-2xl p-5 sm:p-6 w-full max-w-lg sm:max-w-xl max-h-[90vh] overflow-y-auto space-y-5 shadow-lg">
-        <div className="flex justify-between items-start pb-3 border-b border-neutral-200/80">
+      <div className="bg-[#FBF9F5] border border-[#E2D9C0] rounded-2xl p-5 sm:p-6 w-full max-w-lg sm:max-w-xl max-h-[90vh] overflow-y-auto space-y-5 shadow-lg">
+        <div className="flex justify-between items-start pb-3 border-b border-[#E2D9C0]">
           <div>
-            <h3 className="font-semibold text-base text-neutral-900">Chỉnh sửa tùy chọn món</h3>
-            <div className="text-xs text-neutral-500 mt-0.5">
+            <h3 className="font-semibold text-base text-[#124E35]">Chỉnh sửa tùy chọn món</h3>
+            <div className="text-xs text-neutral-600 mt-0.5">
               {editProductName} · Giá cơ bản:{' '}
-              <span className="font-mono tabular-nums font-semibold text-emerald-800">
+              <span className="font-mono tabular-nums font-semibold text-[#124E35]">
                 {formatPrice(editBasePrice)}
               </span>
             </div>
@@ -66,14 +66,14 @@ export const ModalSuaMon: React.FC<ModalSuaMonProps> = ({
             type="button"
             aria-label="Đóng"
             onClick={onClose}
-            className="px-2.5 py-1 rounded-lg border border-neutral-200/80 text-xs text-neutral-600 hover:text-emerald-900 hover:bg-emerald-50/70 cursor-pointer transition-colors"
+            className="px-2.5 py-1 rounded-lg border border-[#D5CCB4] bg-[#EDE6D1] text-xs font-medium text-[#124E35] hover:bg-[#124E35] hover:text-[#F5F0E1] cursor-pointer transition-colors"
           >
             Đóng
           </button>
         </div>
 
         <div>
-          <div className="text-xs font-medium text-neutral-700 mb-2">Kích cỡ (Size)</div>
+          <div className="text-xs font-semibold text-[#124E35] mb-2">Kích cỡ (Size)</div>
           <div className="grid grid-cols-3 gap-2">
             {(['S', 'M', 'L'] as SizeType[]).map((size) => {
               const extra = getSizeExtra(size);
@@ -86,8 +86,8 @@ export const ModalSuaMon: React.FC<ModalSuaMonProps> = ({
                   onClick={() => setEditSize(size)}
                   className={`py-2 px-2.5 text-xs border rounded-lg text-center cursor-pointer transition-colors ${
                     isSelected
-                      ? 'bg-emerald-800 text-white font-medium border-emerald-800'
-                      : 'bg-white text-neutral-600 border-neutral-200/80 hover:bg-emerald-50/70 hover:text-emerald-900'
+                      ? 'bg-[#124E35] text-[#F5F0E1] font-semibold border-[#124E35]'
+                      : 'bg-[#EDE6D1] text-[#124E35] font-medium border-[#D5CCB4] hover:bg-[#124E35] hover:text-[#F5F0E1]'
                   }`}
                 >
                   {label}
@@ -98,7 +98,7 @@ export const ModalSuaMon: React.FC<ModalSuaMonProps> = ({
         </div>
 
         <div>
-          <div className="text-xs font-medium text-neutral-700 mb-2">Topping thêm</div>
+          <div className="text-xs font-semibold text-[#124E35] mb-2">Topping thêm</div>
           <div className="grid grid-cols-2 gap-2">
             {(['Trân châu', 'Kem'] as ToppingType[]).map((name) => {
               const extra = name === 'Trân châu' ? '+5.000đ' : '+10.000đ';
@@ -110,8 +110,8 @@ export const ModalSuaMon: React.FC<ModalSuaMonProps> = ({
                   onClick={() => onToggleEditTopping(name)}
                   className={`py-2 px-3 text-xs border rounded-lg flex items-center justify-between cursor-pointer transition-colors ${
                     isChecked
-                      ? 'bg-emerald-800 text-white font-medium border-emerald-800'
-                      : 'bg-white text-neutral-600 border-neutral-200/80 hover:bg-emerald-50/70 hover:text-emerald-900'
+                      ? 'bg-[#124E35] text-[#F5F0E1] font-semibold border-[#124E35]'
+                      : 'bg-[#EDE6D1] text-[#124E35] font-medium border-[#D5CCB4] hover:bg-[#124E35] hover:text-[#F5F0E1]'
                   }`}
                 >
                   <span>{name}</span>
@@ -124,7 +124,7 @@ export const ModalSuaMon: React.FC<ModalSuaMonProps> = ({
 
         <div className="space-y-3">
           <div>
-            <div className="text-xs font-medium text-neutral-700 mb-2">Mức đường</div>
+            <div className="text-xs font-semibold text-[#124E35] mb-2">Mức đường</div>
             <div className="grid grid-cols-5 gap-1.5">
               {(['100%', '70%', '50%', '30%', 'Ít đường'] as SugarType[]).map((sugar) => (
                 <button
@@ -133,8 +133,8 @@ export const ModalSuaMon: React.FC<ModalSuaMonProps> = ({
                   onClick={() => setEditSugar(sugar)}
                   className={`py-1.5 text-[11px] border rounded-lg text-center cursor-pointer transition-colors ${
                     editSugar === sugar
-                      ? 'bg-emerald-800 text-white font-medium border-emerald-800'
-                      : 'bg-white text-neutral-600 border-neutral-200/80 hover:bg-emerald-50/70 hover:text-emerald-900'
+                      ? 'bg-[#124E35] text-[#F5F0E1] font-semibold border-[#124E35]'
+                      : 'bg-[#EDE6D1] text-[#124E35] font-medium border-[#D5CCB4] hover:bg-[#124E35] hover:text-[#F5F0E1]'
                   }`}
                 >
                   {sugar}
@@ -144,7 +144,7 @@ export const ModalSuaMon: React.FC<ModalSuaMonProps> = ({
           </div>
 
           <div>
-            <div className="text-xs font-medium text-neutral-700 mb-2">Mức đá</div>
+            <div className="text-xs font-semibold text-[#124E35] mb-2">Mức đá</div>
             <div className="grid grid-cols-5 gap-1.5">
               {(['100%', '70%', '50%', 'Ít đá', 'Đá riêng'] as IceType[]).map((ice) => (
                 <button
@@ -153,8 +153,8 @@ export const ModalSuaMon: React.FC<ModalSuaMonProps> = ({
                   onClick={() => setEditIce(ice)}
                   className={`py-1.5 text-[11px] border rounded-lg text-center cursor-pointer transition-colors ${
                     editIce === ice
-                      ? 'bg-emerald-800 text-white font-medium border-emerald-800'
-                      : 'bg-white text-neutral-600 border-neutral-200/80 hover:bg-emerald-50/70 hover:text-emerald-900'
+                      ? 'bg-[#124E35] text-[#F5F0E1] font-semibold border-[#124E35]'
+                      : 'bg-[#EDE6D1] text-[#124E35] font-medium border-[#D5CCB4] hover:bg-[#124E35] hover:text-[#F5F0E1]'
                   }`}
                 >
                   {ice}
@@ -166,23 +166,23 @@ export const ModalSuaMon: React.FC<ModalSuaMonProps> = ({
 
         {setEditQty && (
           <div className="flex items-center justify-between pt-1">
-            <span className="text-xs font-medium text-neutral-700">Số lượng</span>
+            <span className="text-xs font-semibold text-[#124E35]">Số lượng</span>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setEditQty(Math.max(1, editQty - 1))}
-                className="w-7 h-7 rounded-lg border border-neutral-200/80 bg-white hover:bg-emerald-50/70 hover:text-emerald-900 flex items-center justify-center text-neutral-700 text-xs font-mono cursor-pointer transition-colors"
+                className="w-7 h-7 rounded-lg border border-[#D5CCB4] bg-[#EDE6D1] hover:bg-[#124E35] hover:text-[#F5F0E1] flex items-center justify-center text-[#124E35] text-xs font-mono font-semibold cursor-pointer transition-colors"
               >
                 -
               </button>
-              <span className="w-7 text-center font-mono text-xs font-semibold text-neutral-900 tabular-nums">
+              <span className="w-7 text-center font-mono text-xs font-semibold text-[#124E35] tabular-nums">
                 {editQty}
               </span>
               <button
                 type="button"
                 disabled={editQty >= editMaxStock}
                 onClick={() => setEditQty(Math.min(editMaxStock, editQty + 1))}
-                className="w-7 h-7 rounded-lg border border-neutral-200/80 bg-white hover:bg-emerald-50/70 hover:text-emerald-900 flex items-center justify-center text-neutral-700 text-xs font-mono cursor-pointer disabled:opacity-40 transition-colors"
+                className="w-7 h-7 rounded-lg border border-[#D5CCB4] bg-[#EDE6D1] hover:bg-[#124E35] hover:text-[#F5F0E1] flex items-center justify-center text-[#124E35] text-xs font-mono font-semibold cursor-pointer disabled:opacity-40 transition-colors"
               >
                 +
               </button>
@@ -191,7 +191,7 @@ export const ModalSuaMon: React.FC<ModalSuaMonProps> = ({
         )}
 
         <div>
-          <label className="block text-xs font-medium mb-1.5 text-neutral-700">
+          <label className="block text-xs font-semibold mb-1.5 text-[#124E35]">
             Ghi chú cho quán
           </label>
           <textarea
@@ -199,13 +199,13 @@ export const ModalSuaMon: React.FC<ModalSuaMonProps> = ({
             onChange={(e) => setEditNote(e.target.value)}
             placeholder="Ví dụ: Ít ngọt, lấy đá riêng..."
             rows={2}
-            className="w-full p-2.5 border border-neutral-200/80 bg-white text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-emerald-800 focus:ring-1 focus:ring-emerald-800 resize-none rounded-lg transition-colors"
+            className="w-full p-2.5 border border-[#D5CCB4] bg-white text-xs text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-[#124E35] focus:ring-1 focus:ring-[#124E35] resize-none rounded-lg transition-colors"
           />
         </div>
 
-        <div className="pt-3 border-t border-neutral-200/80 flex justify-between items-center text-xs">
-          <span className="text-neutral-500">Thành tiền mới ({editQty} ly):</span>
-          <span className="font-mono tabular-nums font-bold text-base text-emerald-800">
+        <div className="pt-3 border-t border-[#E2D9C0] flex justify-between items-center text-xs">
+          <span className="text-neutral-600">Thành tiền mới ({editQty} ly):</span>
+          <span className="font-mono tabular-nums font-bold text-base text-[#124E35]">
             {formatPrice(editUnitPrice * editQty)}
           </span>
         </div>
@@ -214,14 +214,14 @@ export const ModalSuaMon: React.FC<ModalSuaMonProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="w-full py-2.5 border border-neutral-200/80 bg-white text-neutral-700 text-xs font-medium rounded-lg cursor-pointer hover:bg-stone-50 transition-colors"
+            className="w-full py-2.5 border border-[#D5CCB4] bg-[#EDE6D1] text-[#124E35] text-xs font-semibold rounded-lg cursor-pointer hover:bg-[#E2D9C0] transition-colors"
           >
             Hủy
           </button>
           <button
             type="button"
             onClick={onSave}
-            className="w-full py-2.5 bg-emerald-800 text-white text-xs font-medium rounded-lg cursor-pointer hover:bg-emerald-700 transition-colors"
+            className="w-full py-2.5 bg-[#124E35] text-[#F5F0E1] text-xs font-semibold rounded-lg cursor-pointer hover:opacity-95 transition-colors"
           >
             Lưu thay đổi
           </button>
@@ -230,3 +230,4 @@ export const ModalSuaMon: React.FC<ModalSuaMonProps> = ({
     </div>
   );
 };
+

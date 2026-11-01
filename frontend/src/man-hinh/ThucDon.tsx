@@ -95,7 +95,7 @@ export const ThucDon: React.FC<ThucDonProps> = ({
           onLogout={onLogout}
         />
 
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5 bg-white p-3.5 sm:p-4 rounded-xl border border-neutral-200/80">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5 bg-[#FBF9F5] p-3.5 sm:p-4 rounded-xl border border-[#E2D9C0]">
           <div className="relative flex-1">
             <input
               type="text"
@@ -103,14 +103,14 @@ export const ThucDon: React.FC<ThucDonProps> = ({
               onChange={(e) => setTuKhoaTimKiem(e.target.value)}
               placeholder="Tìm tên món hoặc hương vị (vd: muối, sen vàng, cốt dừa...)"
               aria-label="Tìm kiếm món"
-              className="w-full pl-3.5 pr-9 py-2.5 bg-stone-50 border border-neutral-200/80 rounded-xl text-xs sm:text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:bg-white focus:border-emerald-800 focus:ring-1 focus:ring-emerald-800 transition-colors"
+              className="w-full pl-3.5 pr-9 py-2.5 bg-white border border-[#D5CCB4] rounded-xl text-xs sm:text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-[#124E35] focus:ring-1 focus:ring-[#124E35] transition-colors"
             />
             {tuKhoaTimKiem && (
               <button
                 type="button"
                 aria-label="Xóa từ khóa tìm kiếm"
                 onClick={() => setTuKhoaTimKiem('')}
-                className="w-6 h-6 rounded-lg text-neutral-400 hover:text-emerald-900 hover:bg-emerald-50/70 flex items-center justify-center absolute right-2 top-1/2 -translate-y-1/2 text-xs font-mono cursor-pointer transition-colors"
+                className="w-6 h-6 rounded-lg text-[#124E35] bg-[#EDE6D1] hover:bg-[#124E35] hover:text-[#F5F0E1] flex items-center justify-center absolute right-2 top-1/2 -translate-y-1/2 text-xs font-mono cursor-pointer transition-colors"
               >
                 ×
               </button>
@@ -131,14 +131,14 @@ export const ThucDon: React.FC<ThucDonProps> = ({
                   onClick={() => setDanhMucDangChon(cat)}
                   className={`px-3.5 py-2 text-xs sm:text-sm rounded-lg border transition-colors shrink-0 flex items-center gap-1.5 cursor-pointer whitespace-nowrap ${
                     dangChon
-                      ? 'bg-emerald-800 text-white font-medium border-emerald-800'
-                      : 'bg-white text-neutral-600 border-neutral-200/80 hover:bg-emerald-50/70 hover:text-emerald-900 hover:border-emerald-800/30'
+                      ? 'bg-[#124E35] text-[#F5F0E1] font-semibold border-[#124E35]'
+                      : 'bg-[#EDE6D1] text-[#124E35] font-medium border-[#D5CCB4] hover:bg-[#124E35] hover:text-[#F5F0E1] hover:border-[#124E35]'
                   }`}
                 >
                   <span>{cat}</span>
                   <span
                     className={`text-[11px] font-mono tabular-nums ${
-                      dangChon ? 'text-emerald-100' : 'text-neutral-400'
+                      dangChon ? 'text-[#F5F0E1]/90' : 'text-[#124E35]/80'
                     }`}
                   >
                     {soLuong}
@@ -149,147 +149,149 @@ export const ThucDon: React.FC<ThucDonProps> = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5">
-          {productsLoading ? (
-            <div className="text-center text-sm py-16 text-neutral-500 col-span-full bg-white border border-neutral-200/80 rounded-xl">
-              Đang tải thực đơn...
-            </div>
-          ) : danhSachMonDaLoc.length === 0 ? (
-            <div className="col-span-full py-14 px-4 text-center bg-white border border-neutral-200/80 rounded-xl space-y-3">
-              <div className="space-y-1">
-                <p className="text-sm font-medium text-neutral-900">
-                  Không tìm thấy món phù hợp
-                </p>
-                <p className="text-xs text-neutral-500">
-                  Không có kết quả cho{' '}
-                  {tuKhoaTimKiem ? `từ khóa "${tuKhoaTimKiem}"` : 'bộ lọc hiện tại'}
-                  {danhMucDangChon !== 'Tất cả' ? ` trong danh mục "${danhMucDangChon}"` : ''}.
-                </p>
+        <div className="bg-[#FBF9F5]/85 backdrop-blur-md p-4 sm:p-6 rounded-3xl border border-[#E2D9C0]/60 shadow-sm">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5 items-stretch">
+            {productsLoading ? (
+              <div className="text-center text-sm py-16 text-[#124E35] col-span-full bg-white border border-[#DFD6C0] rounded-xl font-medium shadow-sm">
+                Đang tải thực đơn...
               </div>
-              <button
-                type="button"
-                onClick={datLaiBoLoc}
-                className="inline-flex items-center px-4 py-2 rounded-lg bg-emerald-800 text-white text-xs sm:text-sm font-medium hover:bg-emerald-700 cursor-pointer transition-colors"
-              >
-                Đặt lại bộ lọc
-              </button>
-            </div>
-          ) : (
-            danhSachMonDaLoc.map((item) => {
-              const hetHang = item.stock <= 0;
-              const vuaThem = idVuaThemNhanh === item.id;
-              const loiAnh = anhLoi[item.id];
-              const duongDanAnh = layDuongDanAnh(item.imageUrl) || anhDuPhong;
-
-              return (
-                <div
-                  key={item.id}
-                  onClick={() => onOpenProductDetail(item.id)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
-                      onOpenProductDetail(item.id);
-                    }
-                  }}
-                  className="w-full bg-white border border-neutral-200/80 rounded-xl overflow-hidden flex flex-col justify-between text-left cursor-pointer hover:border-emerald-800/40 transition-colors"
+            ) : danhSachMonDaLoc.length === 0 ? (
+              <div className="col-span-full py-14 px-4 text-center bg-white border border-[#DFD6C0] rounded-xl space-y-3 shadow-sm">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-[#124E35]">
+                    Không tìm thấy món phù hợp
+                  </p>
+                  <p className="text-xs text-neutral-600">
+                    Không có kết quả cho{' '}
+                    {tuKhoaTimKiem ? `từ khóa "${tuKhoaTimKiem}"` : 'bộ lọc hiện tại'}
+                    {danhMucDangChon !== 'Tất cả' ? ` trong danh mục "${danhMucDangChon}"` : ''}.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={datLaiBoLoc}
+                  className="inline-flex items-center px-4 py-2 rounded-lg bg-[#124E35] text-[#F5F0E1] text-xs sm:text-sm font-semibold hover:opacity-95 cursor-pointer transition-colors"
                 >
-                  <div>
-                    <div className="w-full bg-[#115e3b] border-b border-neutral-200/80 overflow-hidden relative flex items-center justify-center">
-                      {loiAnh ? (
-                        <div className="w-full aspect-square bg-stone-50 text-neutral-400 text-xs flex items-center justify-center">
-                          Ảnh
+                  Đặt lại bộ lọc
+                </button>
+              </div>
+            ) : (
+              danhSachMonDaLoc.map((item) => {
+                const hetHang = item.stock <= 0;
+                const vuaThem = idVuaThemNhanh === item.id;
+                const loiAnh = anhLoi[item.id];
+                const duongDanAnh = layDuongDanAnh(item.imageUrl) || anhDuPhong;
+
+                return (
+                  <div
+                    key={item.id}
+                    onClick={() => onOpenProductDetail(item.id)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        onOpenProductDetail(item.id);
+                      }
+                    }}
+                    className="w-full h-full bg-white border border-[#DFD6C0] shadow-sm rounded-xl overflow-hidden flex flex-col justify-between text-left cursor-pointer hover:border-[#124E35]/50 transition-colors"
+                  >
+                    <div>
+                      <div className="w-full bg-[#124E35] border-b border-[#DFD6C0] overflow-hidden relative flex items-center justify-center">
+                        {loiAnh ? (
+                          <div className="w-full aspect-square bg-[#EDE6D1] text-[#124E35] text-xs flex items-center justify-center">
+                            Ảnh
+                          </div>
+                        ) : (
+                          <img
+                            src={duongDanAnh}
+                            alt={item.name}
+                            referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              if (anhDuPhong && !e.currentTarget.src.endsWith(anhDuPhong)) {
+                                e.currentTarget.src = anhDuPhong;
+                              } else {
+                                setAnhLoi((prev) => ({ ...prev, [item.id]: true }));
+                              }
+                            }}
+                            className="w-full h-auto object-contain block"
+                          />
+                        )}
+                      </div>
+
+                      <div className="p-2.5 sm:p-4 space-y-1.5">
+                        <div className="flex items-center justify-between gap-1 sm:gap-2 flex-wrap">
+                          {item.category ? (
+                            <span className="text-[10px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded bg-[#EDE6D1] border border-[#D5CCB4] text-[#124E35] font-semibold truncate max-w-[60%]">
+                              {item.category}
+                            </span>
+                          ) : (
+                            <span />
+                          )}
+                          <span
+                            className={`text-[10px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded border font-semibold shrink-0 ${
+                              hetHang
+                                ? 'bg-stone-100 border-neutral-200 text-neutral-400'
+                                : 'bg-[#EDE6D1] border-[#D5CCB4] text-[#124E35]'
+                            }`}
+                          >
+                            {hetHang ? 'Hết hàng' : `Còn ${item.stock}`}
+                          </span>
                         </div>
-                      ) : (
-                        <img
-                          src={duongDanAnh}
-                          alt={item.name}
-                          referrerPolicy="no-referrer"
-                          onError={(e) => {
-                            if (anhDuPhong && !e.currentTarget.src.endsWith(anhDuPhong)) {
-                              e.currentTarget.src = anhDuPhong;
-                            } else {
-                              setAnhLoi((prev) => ({ ...prev, [item.id]: true }));
-                            }
-                          }}
-                          className="w-full h-auto object-contain block"
-                        />
-                      )}
+
+                        <div className="font-semibold text-neutral-900 text-xs sm:text-base leading-snug pt-0.5 line-clamp-2">
+                          {item.name}
+                        </div>
+
+                        {item.description && (
+                          <p className="text-[11px] sm:text-xs text-neutral-600 line-clamp-2 leading-relaxed">
+                            {item.description}
+                          </p>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="p-2.5 sm:p-4 space-y-1.5">
-                      <div className="flex items-center justify-between gap-1 sm:gap-2 flex-wrap">
-                        {item.category ? (
-                          <span className="text-[10px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded bg-emerald-50/70 text-emerald-900 font-medium truncate max-w-[60%]">
-                            {item.category}
-                          </span>
-                        ) : (
-                          <span />
-                        )}
-                        <span
-                          className={`text-[10px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded font-medium shrink-0 ${
-                            hetHang
-                              ? 'bg-stone-100 text-neutral-400'
-                              : 'bg-emerald-50/70 text-emerald-900'
+                    <div className="px-2.5 sm:px-4 pb-2.5 sm:pb-4 pt-2 flex items-center justify-between gap-1.5 sm:gap-2 border-t border-[#DFD6C0]">
+                      <span className="font-mono tabular-nums font-bold text-xs sm:text-base text-[#124E35]">
+                        {formatPrice(item.price)}
+                      </span>
+
+                      {onQuickAddProduct && (
+                        <button
+                          type="button"
+                          disabled={hetHang}
+                          aria-label={`Thêm nhanh ${item.name}`}
+                          title="Thêm nhanh vào giỏ (Size S, 100% đường/đá)"
+                          onClick={(e) => xuLyThemNhanh(e, item)}
+                          className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg border text-[11px] sm:text-xs font-semibold shrink-0 transition-colors cursor-pointer ${
+                            vuaThem
+                              ? 'bg-[#124E35] text-[#F5F0E1] border-[#124E35]'
+                              : hetHang
+                              ? 'bg-stone-100 text-neutral-300 border-neutral-200 cursor-not-allowed'
+                              : 'bg-[#EDE6D1] text-[#124E35] border-[#D5CCB4] hover:bg-[#124E35] hover:text-[#F5F0E1] hover:border-[#124E35]'
                           }`}
                         >
-                          {hetHang ? 'Hết hàng' : `Còn ${item.stock}`}
-                        </span>
-                      </div>
-
-                      <div className="font-semibold text-neutral-900 text-xs sm:text-base leading-snug pt-0.5 line-clamp-2">
-                        {item.name}
-                      </div>
-
-                      {item.description && (
-                        <p className="text-[11px] sm:text-xs text-neutral-500 line-clamp-2 leading-relaxed">
-                          {item.description}
-                        </p>
+                          {vuaThem ? 'Đã thêm' : '+'}
+                        </button>
                       )}
                     </div>
                   </div>
-
-                  <div className="px-2.5 sm:px-4 pb-2.5 sm:pb-4 pt-2 flex items-center justify-between gap-1.5 sm:gap-2 border-t border-neutral-100">
-                    <span className="font-mono tabular-nums font-bold text-xs sm:text-base text-emerald-800">
-                      {formatPrice(item.price)}
-                    </span>
-
-                    {onQuickAddProduct && (
-                      <button
-                        type="button"
-                        disabled={hetHang}
-                        aria-label={`Thêm nhanh ${item.name}`}
-                        title="Thêm nhanh vào giỏ (Size S, 100% đường/đá)"
-                        onClick={(e) => xuLyThemNhanh(e, item)}
-                        className={`px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg border text-[11px] sm:text-xs font-medium shrink-0 transition-colors cursor-pointer ${
-                          vuaThem
-                            ? 'bg-emerald-800 text-white border-emerald-800'
-                            : hetHang
-                            ? 'bg-stone-100 text-neutral-300 border-neutral-200/80 cursor-not-allowed'
-                            : 'bg-emerald-50/70 text-emerald-900 border-emerald-800/20 hover:bg-emerald-800 hover:text-white hover:border-emerald-800'
-                        }`}
-                      >
-                        {vuaThem ? 'Đã thêm' : '+'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })
-          )}
+                );
+              })
+            )}
+          </div>
         </div>
       </div>
 
       <div className="sticky bottom-4 z-20 pt-2">
-        <div className="bg-white/95 backdrop-blur-xs p-3 sm:p-4 rounded-xl border border-neutral-200/80 shadow-sm flex items-center justify-between gap-4">
-          <div className="hidden sm:block text-xs text-neutral-600">
-            Đã chọn <strong className="font-mono text-emerald-900">{totalCartCount}</strong> món trong giỏ hàng
+        <div className="bg-[#FBF9F5]/95 backdrop-blur-sm p-3 sm:p-4 rounded-xl border border-[#E2D9C0] shadow-sm flex items-center justify-between gap-4">
+          <div className="hidden sm:block text-xs text-neutral-700">
+            Đã chọn <strong className="font-mono text-[#124E35]">{totalCartCount}</strong> món trong giỏ hàng
           </div>
           <button
             type="button"
             onClick={onViewCart}
-            className="w-full sm:w-auto sm:min-w-[240px] ml-auto py-2.5 px-5 bg-emerald-800 text-white font-medium text-sm rounded-lg cursor-pointer hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2"
+            className="w-full sm:w-auto sm:min-w-[240px] ml-auto py-2.5 px-5 bg-[#124E35] text-[#F5F0E1] font-semibold text-sm rounded-lg cursor-pointer hover:opacity-95 transition-colors flex items-center justify-center gap-2"
           >
             <ShoppingBag className="w-4 h-4" />
             <span>Xem giỏ hàng ({totalCartCount})</span>
@@ -301,3 +303,4 @@ export const ThucDon: React.FC<ThucDonProps> = ({
 };
 
 export default ThucDon;
+

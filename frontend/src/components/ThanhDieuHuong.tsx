@@ -21,7 +21,7 @@ export const ThanhDieuHuong: React.FC<ThanhDieuHuongProps> = ({
   const duongDanLogo = layDuongDanAnh(LOGO.chinh);
 
   return (
-    <header className="flex justify-between items-center px-4 sm:px-6 py-3.5 bg-white rounded-xl border border-neutral-200/80 shadow-xs relative">
+    <header className="flex justify-between items-center px-4 sm:px-6 py-3 bg-[#FBF9F5] rounded-xl border border-[#E2D9C0] shadow-xs relative">
       <div className="flex items-center gap-3 shrink-0">
         {duongDanLogo && !loiLogo ? (
           <img
@@ -29,30 +29,30 @@ export const ThanhDieuHuong: React.FC<ThanhDieuHuongProps> = ({
             alt="Logo BrewLite"
             referrerPolicy="no-referrer"
             onError={() => setLoiLogo(true)}
-            className="w-9 h-9 rounded-xl object-cover border border-neutral-200/80 bg-stone-50"
+            className="h-12 w-12 sm:h-14 sm:w-auto object-contain shrink-0"
           />
         ) : (
-          <div className="w-9 h-9 rounded-xl bg-emerald-800 text-white text-sm font-semibold flex items-center justify-center">
+          <div className="h-12 w-12 rounded-xl bg-[#124E35] text-[#F5F0E1] text-base font-bold flex items-center justify-center">
             B
           </div>
         )}
-        <span className="font-semibold text-lg tracking-tight text-emerald-900 whitespace-nowrap">
+        <span className="text-xl sm:text-2xl font-bold tracking-tight text-[#124E35] whitespace-nowrap">
           BrewLite
         </span>
       </div>
 
       <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
-        <div className="text-xs sm:text-sm text-emerald-900 font-mono tabular-nums px-3 py-1.5 rounded-lg bg-emerald-50/70 border border-emerald-800/15">
-          Điểm: <span className="font-semibold text-emerald-900">{user?.loyaltyPoints ?? 0}</span>
+        <div className="text-xs sm:text-sm text-[#124E35] font-mono tabular-nums px-3 py-1.5 rounded-lg bg-[#EDE6D1] border border-[#D5CCB4] font-medium">
+          Điểm: <span className="font-semibold text-[#124E35]">{user?.loyaltyPoints ?? 0}</span>
         </div>
         <button
           type="button"
           aria-label="Mở menu tài khoản"
           onClick={() => setMenuOpen(!menuOpen)}
-          className={`px-3.5 py-1.5 rounded-lg border text-xs sm:text-sm font-medium cursor-pointer transition-colors select-none ${
+          className={`px-3.5 py-1.5 rounded-lg border text-xs sm:text-sm font-semibold cursor-pointer transition-colors select-none ${
             menuOpen
-              ? 'bg-emerald-800 text-white border-emerald-800'
-              : 'border-neutral-200/80 bg-white hover:bg-emerald-50/70 hover:text-emerald-900 hover:border-emerald-800/30 text-neutral-700'
+              ? 'bg-[#124E35] text-[#F5F0E1] border-[#124E35]'
+              : 'border-[#D5CCB4] bg-[#EDE6D1] text-[#124E35] hover:bg-[#124E35] hover:text-[#F5F0E1] hover:border-[#124E35]'
           }`}
         >
           {menuOpen ? 'Đóng' : 'Tài khoản'}
@@ -60,11 +60,11 @@ export const ThanhDieuHuong: React.FC<ThanhDieuHuongProps> = ({
       </div>
 
       {menuOpen && (
-        <div className="absolute right-0 top-14 w-56 bg-white border border-neutral-200/80 rounded-xl shadow-md z-30 text-xs overflow-hidden">
-          <div className="p-3 border-b border-neutral-200/80 bg-emerald-50/70">
-            <div className="text-[11px] text-neutral-500">Tài khoản đang đăng nhập</div>
-            <div className="text-neutral-900 font-medium truncate mt-0.5">{user?.email}</div>
-            <div className="font-mono tabular-nums text-emerald-900 font-medium mt-1">
+        <div className="absolute right-0 top-16 w-56 bg-[#FBF9F5] border border-[#E2D9C0] rounded-xl shadow-md z-30 text-xs overflow-hidden">
+          <div className="p-3 border-b border-[#D5CCB4] bg-[#EDE6D1]">
+            <div className="text-[11px] text-[#124E35]/80">Tài khoản đang đăng nhập</div>
+            <div className="text-[#124E35] font-semibold truncate mt-0.5">{user?.email}</div>
+            <div className="font-mono tabular-nums text-[#124E35] font-semibold mt-1">
               Điểm tích lũy: {user?.loyaltyPoints ?? 0} điểm
             </div>
           </div>
@@ -74,14 +74,14 @@ export const ThanhDieuHuong: React.FC<ThanhDieuHuongProps> = ({
               setMenuOpen(false);
               onNavigateHistory();
             }}
-            className="w-full text-left px-3.5 py-2.5 hover:bg-emerald-50/70 hover:text-emerald-900 border-b border-neutral-200/80 text-neutral-700 cursor-pointer transition-colors font-medium"
+            className="w-full text-left px-3.5 py-2.5 hover:bg-[#EDE6D1] text-[#124E35] border-b border-[#E2D9C0] cursor-pointer transition-colors font-semibold"
           >
             Lịch sử đơn hàng
           </button>
           <button
             type="button"
             onClick={onLogout}
-            className="w-full text-left px-3.5 py-2.5 hover:bg-stone-50 text-neutral-600 hover:text-neutral-900 cursor-pointer transition-colors"
+            className="w-full text-left px-3.5 py-2.5 hover:bg-[#EDE6D1] text-[#124E35] cursor-pointer transition-colors font-medium"
           >
             Đăng xuất
           </button>
@@ -90,3 +90,4 @@ export const ThanhDieuHuong: React.FC<ThanhDieuHuongProps> = ({
     </header>
   );
 };
+

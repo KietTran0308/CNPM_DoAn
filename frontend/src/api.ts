@@ -82,6 +82,7 @@ export interface Payment {
   idempotencyKey: string;
   amount: number;
   method: string;
+  simulateFailure?: boolean;
 }
 
 export const DEFAULT_PRODUCTS: Product[] = [
@@ -548,10 +549,8 @@ export const api = {
       return { status: cached.status, isDuplicate: true };
     }
 
-    if (trangThaiKetQua) {
-      idempotencyStore.set(paymentPayload.idempotencyKey, { status: trangThaiKetQua });
-      return { status: trangThaiKetQua, isDuplicate: false };
-    }
+    const simulateFailure =
+      trangThaiKetQua === 'PAYMENT_FAILED' || Boolean(paymentPayload.simulateFailure);
 
     const token = getStoredToken();
     return callApiWithFallback<{ status: OrderStatus; isDuplicate?: boolean }>(
@@ -563,28 +562,34 @@ export const api = {
           'Idempotency-Key': paymentPayload.idempotencyKey,
           Authorization: token ? `Bearer ${token}` : '',
         },
-        body: JSON.stringify(paymentPayload),
+        body: JSON.stringify({
+          ...paymentPayload,
+          simulateFailure,
+        }),
       },
       () => {
-        const finalStatus: OrderStatus = 'PAID';
+        const finalStatus: OrderStatus =
+          trangThaiKetQua || (simulateFailure ? 'PAYMENT_FAILED' : 'PAID');
         idempotencyStore.set(paymentPayload.idempotencyKey, { status: finalStatus });
 
         try {
           const raw = localStorage.getItem('brewlite_orders_history');
-          if (raw) {
-            const list: Order[] = JSON.parse(raw);
-            const ord = list.find((o) => o.id === paymentPayload.orderId);
-            if (ord) ord.status = finalStatus;
+          const list: Order[] = raw ? JSON.parse(raw) : [...SEED_ORDERS];
+          const ord = list.find((o) => o.id === paymentPayload.orderId);
+          if (ord) {
+            ord.status = finalStatus;
             localStorage.setItem('brewlite_orders_history', JSON.stringify(list));
           }
         } catch {}
 
-        const earned = Math.floor(paymentPayload.amount / 50000) * 5;
-        if (earned > 0) {
-          const currentUser = getStoredUser();
-          if (currentUser) {
-            currentUser.loyaltyPoints = (currentUser.loyaltyPoints || 0) + earned;
-            setStoredUser(currentUser);
+        if (finalStatus === 'PAID') {
+          const earned = Math.floor(paymentPayload.amount / 10000);
+          if (earned > 0) {
+            const currentUser = getStoredUser();
+            if (currentUser) {
+              currentUser.loyaltyPoints = (currentUser.loyaltyPoints || 0) + earned;
+              setStoredUser(currentUser);
+            }
           }
         }
 

@@ -4,6 +4,8 @@ export const LOGO = {
   bannerTrangChu: '/images/logo.png',
 };
 
+export const BACKGROUND = '/images/background.png';
+
 export const ANH_MAC_DINH = '/images/caphesua.png';
 
 export const ANH_MON_NUOC = {
@@ -15,12 +17,12 @@ export const ANH_MON_NUOC = {
   caPheTrung: '/images/caphetrung.png',
   bacXiu: '/images/bacxiu.png',
   caPheCotDua: '/images/caphecotdua.png',
-  caPheSuaTuoiSuongSao: '/images/capheden.png',
+  caPheSuaTuoiSuongSao: '/images/caphesuatuoisuongsao.png',
   traSenVang: '/images/trasenvang.png',
   traDaoCamSa: '/images/tradaocamsa.png',
   traVaiHoaHong: '/images/travaihoahong.png',
   traMangCau: '/images/tramangcau.png',
-  traOLongNhanNhuc: '/images/trasenvang.png',
+  traOLongNhanNhuc: '/images/tralongnhanhatchia.png',
 };
 
 export function layDuongDanAnh(duongDan?: string): string {
@@ -43,6 +45,8 @@ export function layDuongDanAnh(duongDan?: string): string {
 
 export const HINH_ANH = {
   LOGO,
+  BACKGROUND,
   ANH_MAC_DINH,
   ANH_MON_NUOC,
 };
+

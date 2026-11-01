@@ -50,17 +50,17 @@ export const GioHang: React.FC<GioHangProps> = ({
 
   return (
     <div className="w-full flex-1 flex flex-col space-y-5">
-      <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 bg-white rounded-xl border border-neutral-200/80">
+      <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 bg-[#FBF9F5] rounded-xl border border-[#E2D9C0]">
         <div className="flex items-center gap-3">
           <button
             type="button"
             aria-label="Quay lại thực đơn"
             onClick={onBack}
-            className="w-9 h-9 rounded-lg border border-neutral-200/80 bg-white hover:bg-emerald-50/70 hover:text-emerald-900 text-neutral-700 flex items-center justify-center cursor-pointer transition-colors"
+            className="w-9 h-9 rounded-lg border border-[#D5CCB4] bg-[#EDE6D1] hover:bg-[#124E35] hover:text-[#F5F0E1] text-[#124E35] flex items-center justify-center cursor-pointer transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <span className="font-semibold text-base sm:text-lg text-neutral-900">
+          <span className="font-semibold text-base sm:text-lg text-[#124E35]">
             Giỏ hàng {tongSoLy > 0 && `(${tongSoLy})`}
           </span>
         </div>
@@ -70,35 +70,35 @@ export const GioHang: React.FC<GioHangProps> = ({
             <button
               type="button"
               onClick={onClearCart}
-              className="px-3 py-1.5 rounded-lg border border-neutral-200/80 bg-white hover:bg-stone-50 text-neutral-600 hover:text-neutral-900 text-xs sm:text-sm cursor-pointer transition-colors"
+              className="px-3 py-1.5 rounded-lg border border-[#D5CCB4] bg-[#EDE6D1] hover:bg-[#124E35] hover:text-[#F5F0E1] text-[#124E35] font-medium text-xs sm:text-sm cursor-pointer transition-colors"
             >
               Xóa tất cả
             </button>
           )}
-          <span className="text-xs sm:text-sm font-mono tabular-nums border border-emerald-800/15 px-3 py-1.5 rounded-lg bg-emerald-50/70 text-emerald-900">
-            Điểm: <span className="font-semibold text-emerald-900">{user?.loyaltyPoints ?? 0}</span>
+          <span className="text-xs sm:text-sm font-mono tabular-nums border border-[#D5CCB4] px-3 py-1.5 rounded-lg bg-[#EDE6D1] text-[#124E35] font-medium">
+            Điểm: <span className="font-semibold text-[#124E35]">{user?.loyaltyPoints ?? 0}</span>
           </span>
         </div>
       </div>
 
       {editSuccessToast && (
-        <div className="px-4 py-2.5 bg-emerald-50/70 border border-emerald-800/20 rounded-xl text-center text-xs sm:text-sm text-emerald-900 font-medium">
+        <div className="px-4 py-2.5 bg-[#EDE6D1] border border-[#D5CCB4] rounded-xl text-center text-xs sm:text-sm text-[#124E35] font-semibold">
           Đã lưu thay đổi tùy chọn món thành công
         </div>
       )}
 
       {cartLines.length === 0 ? (
-        <div className="py-16 px-4 text-center bg-white border border-neutral-200/80 rounded-xl space-y-3">
+        <div className="py-16 px-4 text-center bg-[#FBF9F5] border border-[#E2D9C0] rounded-xl space-y-3">
           <div className="space-y-1">
-            <p className="text-sm font-medium text-neutral-900">Giỏ hàng của bạn đang trống</p>
-            <p className="text-xs text-neutral-500">
+            <p className="text-sm font-semibold text-[#124E35]">Giỏ hàng của bạn đang trống</p>
+            <p className="text-xs text-neutral-600">
               Hãy chọn những món cà phê và trà yêu thích từ thực đơn.
             </p>
           </div>
           <button
             type="button"
             onClick={onBack}
-            className="inline-flex items-center px-4 py-2.5 rounded-lg bg-emerald-800 text-white text-xs sm:text-sm font-medium hover:bg-emerald-700 cursor-pointer transition-colors"
+            className="inline-flex items-center px-4 py-2.5 rounded-lg bg-[#124E35] text-[#F5F0E1] text-xs sm:text-sm font-semibold hover:opacity-95 cursor-pointer transition-colors"
           >
             Quay lại thực đơn
           </button>
@@ -109,30 +109,30 @@ export const GioHang: React.FC<GioHangProps> = ({
             {cartLines.map((line) => (
               <div
                 key={line.item.id}
-                className="p-4 sm:p-5 bg-white border border-neutral-200/80 rounded-xl text-xs sm:text-sm space-y-3"
+                className="p-4 sm:p-5 bg-[#FBF9F5] border border-[#E2D9C0] rounded-xl text-xs sm:text-sm space-y-3"
               >
                 <div className="flex justify-between items-start gap-3">
                   <div className="min-w-0 space-y-1">
                     <div className="font-semibold text-neutral-900 text-sm sm:text-base">
                       {line.productName}{' '}
-                      <span className="text-xs sm:text-sm font-normal text-neutral-500">
+                      <span className="text-xs sm:text-sm font-normal text-neutral-600">
                         (Size {line.item.size}) · x{line.item.qty}
                       </span>
                     </div>
                     {(line.toppings.length > 0 || line.sugar || line.ice) && (
-                      <div className="text-xs text-neutral-500">
+                      <div className="text-xs text-neutral-600">
                         {line.toppings.length > 0 && `Topping: ${line.toppings.join(', ')} · `}
                         Đường: {line.sugar} · Đá: {line.ice}
                       </div>
                     )}
                     {line.note && (
-                      <div className="text-xs text-neutral-500 italic">
+                      <div className="text-xs text-neutral-600 italic">
                         Ghi chú: &ldquo;{line.note}&rdquo;
                       </div>
                     )}
                   </div>
                   <div className="text-right shrink-0">
-                    <span className="font-mono tabular-nums font-bold text-sm sm:text-base text-emerald-800 block">
+                    <span className="font-mono tabular-nums font-bold text-sm sm:text-base text-[#124E35] block">
                       {formatPrice(line.item.lineTotal)}
                     </span>
                     {line.item.qty > 1 && (
@@ -143,11 +143,11 @@ export const GioHang: React.FC<GioHangProps> = ({
                   </div>
                 </div>
 
-                <div className="flex justify-between items-center pt-2.5 border-t border-neutral-200/80">
+                <div className="flex justify-between items-center pt-2.5 border-t border-[#E2D9C0]">
                   <button
                     type="button"
                     onClick={() => onOpenEditModal(line)}
-                    className="px-3 py-1.5 border border-emerald-800/20 bg-emerald-50/70 rounded-lg text-xs text-emerald-900 font-medium cursor-pointer hover:bg-emerald-800 hover:text-white transition-colors"
+                    className="px-3 py-1.5 border border-[#D5CCB4] bg-[#EDE6D1] rounded-lg text-xs text-[#124E35] font-semibold cursor-pointer hover:bg-[#124E35] hover:text-[#F5F0E1] transition-colors"
                   >
                     Tùy chỉnh
                   </button>
@@ -157,11 +157,11 @@ export const GioHang: React.FC<GioHangProps> = ({
                       type="button"
                       aria-label="Giảm số lượng"
                       onClick={() => onUpdateCartQty(line.item.id, -1)}
-                      className="w-8 h-8 border border-neutral-200/80 bg-white rounded-lg flex items-center justify-center text-neutral-700 font-mono hover:bg-emerald-50/70 hover:text-emerald-900 cursor-pointer transition-colors"
+                      className="w-8 h-8 border border-[#D5CCB4] bg-[#EDE6D1] rounded-lg flex items-center justify-center text-[#124E35] font-mono font-semibold hover:bg-[#124E35] hover:text-[#F5F0E1] cursor-pointer transition-colors"
                     >
                       -
                     </button>
-                    <span className="w-7 text-center font-mono tabular-nums font-semibold text-neutral-900">
+                    <span className="w-7 text-center font-mono tabular-nums font-semibold text-[#124E35]">
                       {line.item.qty}
                     </span>
                     <button
@@ -169,7 +169,7 @@ export const GioHang: React.FC<GioHangProps> = ({
                       aria-label="Tăng số lượng"
                       onClick={() => onUpdateCartQty(line.item.id, 1)}
                       disabled={line.item.qty >= line.stock}
-                      className="w-8 h-8 border border-neutral-200/80 bg-white rounded-lg flex items-center justify-center text-neutral-700 font-mono hover:bg-emerald-50/70 hover:text-emerald-900 cursor-pointer disabled:opacity-40 transition-colors"
+                      className="w-8 h-8 border border-[#D5CCB4] bg-[#EDE6D1] rounded-lg flex items-center justify-center text-[#124E35] font-mono font-semibold hover:bg-[#124E35] hover:text-[#F5F0E1] cursor-pointer disabled:opacity-40 transition-colors"
                     >
                       +
                     </button>
@@ -177,7 +177,7 @@ export const GioHang: React.FC<GioHangProps> = ({
                       type="button"
                       aria-label="Xóa món"
                       onClick={() => onRemoveCartItem(line.item.id)}
-                      className="px-2.5 py-1.5 border border-neutral-200/80 bg-white hover:bg-stone-50 text-neutral-600 hover:text-neutral-900 rounded-lg cursor-pointer ml-1 transition-colors text-xs"
+                      className="px-2.5 py-1.5 border border-[#D5CCB4] bg-[#EDE6D1] hover:bg-[#124E35] hover:text-[#F5F0E1] text-[#124E35] font-medium rounded-lg cursor-pointer ml-1 transition-colors text-xs"
                     >
                       Xóa
                     </button>
@@ -187,8 +187,8 @@ export const GioHang: React.FC<GioHangProps> = ({
             ))}
           </div>
 
-          <div className="lg:col-span-5 xl:col-span-4 lg:sticky lg:top-6 bg-white border border-neutral-200/80 rounded-xl p-5 space-y-4">
-            <h2 className="font-semibold text-sm sm:text-base text-neutral-900 pb-2.5 border-b border-neutral-200/80">
+          <div className="lg:col-span-5 xl:col-span-4 lg:sticky lg:top-6 bg-[#FBF9F5] border border-[#E2D9C0] rounded-xl p-5 space-y-4">
+            <h2 className="font-semibold text-sm sm:text-base text-[#124E35] pb-2.5 border-b border-[#E2D9C0]">
               Tóm tắt đơn hàng
             </h2>
 
@@ -203,13 +203,13 @@ export const GioHang: React.FC<GioHangProps> = ({
                   }}
                   placeholder="Mã ưu đãi (BREW10 hoặc GIAM10K)"
                   disabled={appliedPromo !== null}
-                  className="flex-1 px-3 py-2 border border-neutral-200/80 rounded-lg bg-white text-xs text-neutral-900 uppercase font-mono placeholder:text-neutral-400 focus:outline-none focus:border-emerald-800 focus:ring-1 focus:ring-emerald-800 disabled:bg-stone-100 disabled:text-neutral-500 transition-colors"
+                  className="flex-1 px-3 py-2 border border-[#D5CCB4] rounded-lg bg-white text-xs text-neutral-900 uppercase font-mono placeholder:text-neutral-400 focus:outline-none focus:border-[#124E35] focus:ring-1 focus:ring-[#124E35] disabled:bg-[#EDE6D1] disabled:text-[#124E35] transition-colors"
                 />
                 {appliedPromo ? (
                   <button
                     type="button"
                     onClick={onRemovePromo}
-                    className="px-3 py-2 border border-neutral-200/80 bg-white text-neutral-700 text-xs font-medium rounded-lg cursor-pointer hover:bg-stone-50 shrink-0 transition-colors"
+                    className="px-3 py-2 border border-[#D5CCB4] bg-[#EDE6D1] text-[#124E35] text-xs font-semibold rounded-lg cursor-pointer hover:bg-[#124E35] hover:text-[#F5F0E1] shrink-0 transition-colors"
                   >
                     Bỏ mã
                   </button>
@@ -217,7 +217,7 @@ export const GioHang: React.FC<GioHangProps> = ({
                   <button
                     type="submit"
                     disabled={!promoCodeInput.trim()}
-                    className="px-3.5 py-2 bg-emerald-800 text-white text-xs font-medium rounded-lg cursor-pointer hover:bg-emerald-700 disabled:bg-neutral-200 disabled:text-neutral-400 shrink-0 transition-colors"
+                    className="px-3.5 py-2 bg-[#124E35] text-[#F5F0E1] text-xs font-semibold rounded-lg cursor-pointer hover:opacity-95 disabled:bg-neutral-200 disabled:text-neutral-400 shrink-0 transition-colors"
                   >
                     Áp dụng
                   </button>
@@ -228,7 +228,7 @@ export const GioHang: React.FC<GioHangProps> = ({
               )}
             </div>
 
-            <div className="space-y-2 pt-2 border-t border-neutral-200/80">
+            <div className="space-y-2 pt-2 border-t border-[#E2D9C0]">
               <div className="flex justify-between items-center text-xs sm:text-sm text-neutral-600">
                 <span>Tạm tính ({tongSoLy} món)</span>
                 <span className="font-mono tabular-nums text-neutral-900">
@@ -236,14 +236,14 @@ export const GioHang: React.FC<GioHangProps> = ({
                 </span>
               </div>
               {appliedPromo && (
-                <div className="flex justify-between items-center text-xs sm:text-sm text-emerald-800 font-medium">
+                <div className="flex justify-between items-center text-xs sm:text-sm text-[#124E35] font-semibold">
                   <span>Ưu đãi ({appliedPromo.code})</span>
                   <span className="font-mono tabular-nums">-{formatPrice(discountAmount)}</span>
                 </div>
               )}
-              <div className="flex justify-between items-center pt-2.5 border-t border-neutral-200/80">
-                <span className="font-semibold text-sm text-neutral-900">Tổng thanh toán</span>
-                <span className="font-mono tabular-nums font-bold text-lg text-emerald-800">
+              <div className="flex justify-between items-center pt-2.5 border-t border-[#E2D9C0]">
+                <span className="font-semibold text-sm text-[#124E35]">Tổng thanh toán</span>
+                <span className="font-mono tabular-nums font-bold text-lg text-[#124E35]">
                   {formatPrice(totalCartPrice)}
                 </span>
               </div>
@@ -253,7 +253,7 @@ export const GioHang: React.FC<GioHangProps> = ({
               type="button"
               onClick={onCheckout}
               disabled={cartLines.length === 0}
-              className="w-full py-3 bg-emerald-800 text-white font-medium text-sm rounded-lg cursor-pointer hover:bg-emerald-700 transition-colors"
+              className="w-full py-3 bg-[#124E35] text-[#F5F0E1] font-semibold text-sm rounded-lg cursor-pointer hover:opacity-95 transition-colors"
             >
               Tiến hành thanh toán
             </button>
@@ -265,3 +265,4 @@ export const GioHang: React.FC<GioHangProps> = ({
 };
 
 export default GioHang;
+

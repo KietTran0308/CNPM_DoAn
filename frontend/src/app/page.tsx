@@ -29,6 +29,7 @@ import {
 } from '../types';
 
 import { ModalSuaMon } from '../components/ModalSuaMon';
+import { BACKGROUND } from '../hinhAnh';
 import { useGioHang } from '../store/useGioHang';
 import { QUERY_KEYS } from '../hooks/useTruyVan';
 import { DangNhap } from '../man-hinh/DangNhap';
@@ -89,6 +90,7 @@ function UngDungDatNuoc() {
   const [cardNumber, setCardNumber] = useState('9704 1985 2468 1234');
   const [cardExpiry, setCardExpiry] = useState('12/28');
   const [cardCvv, setCardCvv] = useState('888');
+  const [simulatePaymentError, setSimulatePaymentError] = useState(false);
   const [currentPendingOrderId, setCurrentPendingOrderId] = useState<string | null>(null);
   const [checkoutStatus, setCheckoutStatus] = useState<OrderStatus | null>(null);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -136,7 +138,10 @@ function UngDungDatNuoc() {
   const taiDanhSachMon = async () => {
     setProductsLoading(true);
     try {
-      const data = await api.getProducts();
+      const data = await queryClient.fetchQuery({
+        queryKey: QUERY_KEYS.danhSachMon,
+        queryFn: () => api.getProducts(),
+      });
       setProducts(data || DEFAULT_PRODUCTS);
     } catch {
       setProducts(DEFAULT_PRODUCTS);
@@ -158,7 +163,10 @@ function UngDungDatNuoc() {
     setAddingToCart(false);
 
     try {
-      const product = await api.getProductById(productId);
+      const product = await queryClient.fetchQuery({
+        queryKey: QUERY_KEYS.chiTietMon(productId),
+        queryFn: () => api.getProductById(productId),
+      });
       if (product) {
         setSelectedProduct(product);
       }
@@ -171,7 +179,10 @@ function UngDungDatNuoc() {
   const taiLichSuDon = async () => {
     setHistoryLoading(true);
     try {
-      const data = await api.getMyOrders();
+      const data = await queryClient.fetchQuery({
+        queryKey: QUERY_KEYS.lichSuDon,
+        queryFn: () => api.getMyOrders(),
+      });
       setOrderHistory(data || []);
     } catch {
     } finally {
@@ -463,7 +474,11 @@ function UngDungDatNuoc() {
     return `${hh}:${mm} - ${DD}/${MM}/${YYYY}`;
   };
 
-  const xuLyXacNhanThanhToan = async () => {
+  const thucHienThanhToan = async (epThanhCong = false) => {
+    if (!token) {
+      setManHinhHienTai('auth');
+      return;
+    }
     if (cartLines.length === 0) return;
     setCheckoutLoading(true);
     setStockError(null);
@@ -496,6 +511,13 @@ function UngDungDatNuoc() {
           items: orderItems,
         };
         capNhatLichSuDon((prev) => [pendingOrder, ...prev.filter((o) => o.id !== orderId)]);
+      } else {
+        await api.transitionOrderStatus(orderId, 'PENDING').catch(() => {});
+        capNhatLichSuDon((prev) =>
+          prev.map((o) =>
+            o.id === orderId ? { ...o, status: 'PENDING', total: totalCartPrice, items: orderItems } : o
+          )
+        );
       }
 
       const idempotencyKey =
@@ -506,18 +528,20 @@ function UngDungDatNuoc() {
           ? `Ví điện tử (${walletType})`
           : `Thẻ ngân hàng (${cardNumber.slice(-4)})`;
 
+      const cleanCardDigits = cardNumber.replace(/\D/g, '');
+      const loiTheNganHang = paymentMethod === 'bank' && cleanCardDigits.endsWith('0000');
+      const gayLoi = epThanhCong ? false : simulatePaymentError || loiTheNganHang;
+
       const paymentPayload: Payment = {
         id: 'pay_' + Date.now().toString(36),
         orderId,
         idempotencyKey,
         amount: totalCartPrice,
         method: methodString,
+        simulateFailure: gayLoi,
       };
 
-      const cleanCardDigits = cardNumber.replace(/\D/g, '');
-      const loiTheNganHang = paymentMethod === 'bank' && cleanCardDigits.endsWith('0000');
-
-      const targetStatus: OrderStatus = loiTheNganHang ? 'PAYMENT_FAILED' : 'PAID';
+      const targetStatus: OrderStatus = gayLoi ? 'PAYMENT_FAILED' : 'PAID';
       const payRes = await api.processPayment(paymentPayload, targetStatus);
 
       if (payRes.status === 'PAID') {
@@ -563,6 +587,7 @@ function UngDungDatNuoc() {
         clearCart();
         setCurrentPendingOrderId(null);
         setCheckoutStatus(null);
+        setSimulatePaymentError(false);
         setManHinhHienTai('success');
       } else {
         capNhatLichSuDon((prev) =>
@@ -582,23 +607,25 @@ function UngDungDatNuoc() {
     }
   };
 
-  const xuLyThuLaiThanhToan = () => {
-    if (!currentPendingOrderId) return;
-
-    capNhatLichSuDon((prev) =>
-      prev.map((o) => (o.id === currentPendingOrderId ? { ...o, status: 'PENDING' } : o))
-    );
-    setCheckoutStatus(null);
+  const xuLyXacNhanThanhToan = async () => {
+    await thucHienThanhToan(false);
   };
 
-  const xuLyHuyDonDangThanhToan = () => {
+  const xuLyThuLaiThanhToan = async () => {
+    setSimulatePaymentError(false);
+    await thucHienThanhToan(true);
+  };
+
+  const xuLyHuyDonDangThanhToan = async () => {
     if (currentPendingOrderId) {
+      await api.transitionOrderStatus(currentPendingOrderId, 'CANCELLED').catch(() => {});
       capNhatLichSuDon((prev) =>
         prev.map((o) => (o.id === currentPendingOrderId ? { ...o, status: 'CANCELLED' } : o))
       );
     }
     setCurrentPendingOrderId(null);
     setCheckoutStatus(null);
+    setSimulatePaymentError(false);
     setManHinhHienTai('cart');
   };
 
@@ -615,6 +642,7 @@ function UngDungDatNuoc() {
     }
 
     if (targetStatus === 'PENDING') {
+      await api.transitionOrderStatus(orderId, 'PENDING').catch(() => {});
       capNhatLichSuDon((prev) =>
         prev.map((o) => (o.id === orderId ? { ...o, status: 'PENDING' } : o))
       );
@@ -640,6 +668,12 @@ function UngDungDatNuoc() {
           );
           if (lastOrder?.id === orderId) {
             setLastOrder({ ...lastOrder, status: 'PAID' });
+          }
+          if (currentPendingOrderId === orderId) {
+            clearCart();
+            setCurrentPendingOrderId(null);
+            setCheckoutStatus(null);
+            setSimulatePaymentError(false);
           }
           if (!res.isDuplicate) {
             if (order.items) {
@@ -692,6 +726,7 @@ function UngDungDatNuoc() {
         });
       }
     } else {
+      await api.transitionOrderStatus(orderId, targetStatus).catch(() => {});
       if (order.status === 'PAID' && targetStatus === 'CANCELLED') {
         const pointsToRevert = Math.floor(order.total / 10000);
         if (user && pointsToRevert > 0) {
@@ -749,8 +784,20 @@ function UngDungDatNuoc() {
   };
 
   return (
-    <div className="w-full min-h-screen bg-stone-50 text-neutral-900 font-sans flex flex-col">
-      <main className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 flex-1 flex flex-col relative">
+    <div
+      style={{
+        backgroundImage: `url('${BACKGROUND}')`,
+        backgroundSize: '100% auto',
+        backgroundPosition: 'top center',
+        backgroundRepeat: 'repeat-y',
+      }}
+      className="w-full min-h-screen bg-[#124E35] text-neutral-900 font-sans flex flex-col relative"
+    >
+      <div
+        aria-hidden="true"
+        className="fixed inset-0 bg-[#124E35]/35 backdrop-blur-[1px] pointer-events-none z-0"
+      />
+      <main className="w-full max-w-6xl mx-auto px-4 sm:px-8 py-6 flex-1 flex flex-col relative z-10">
         {manHinhHienTai === 'auth' && (
           <DangNhap
             authMode={authMode}
@@ -831,6 +878,10 @@ function UngDungDatNuoc() {
             onApplyPromo={xuLyApMaGiamGia}
             onRemovePromo={removePromo}
             onCheckout={() => {
+              if (!token) {
+                setManHinhHienTai('auth');
+                return;
+              }
               setCheckoutStatus(null);
               setManHinhHienTai('checkout');
             }}
@@ -840,12 +891,24 @@ function UngDungDatNuoc() {
         {manHinhHienTai === 'checkout' && (
           <ThanhToan
             user={user}
+            rawSubtotal={rawSubtotal}
+            discountAmount={discountAmount}
             totalCartPrice={totalCartPrice}
             cartLines={cartLines}
+            promoCodeInput={promoCodeInput}
+            setPromoCodeInput={setPromoCodeInput}
+            appliedPromo={appliedPromo}
+            promoError={promoError}
+            setPromoError={setPromoError}
+            onApplyPromo={xuLyApMaGiamGia}
+            onRemovePromo={removePromo}
             stockError={stockError}
             setStockError={setStockError}
+            currentPendingOrderId={currentPendingOrderId}
             checkoutStatus={checkoutStatus}
             checkoutLoading={checkoutLoading}
+            simulatePaymentError={simulatePaymentError}
+            setSimulatePaymentError={setSimulatePaymentError}
             paymentMethod={paymentMethod}
             setPaymentMethod={setPaymentMethod}
             walletType={walletType}
@@ -894,9 +957,7 @@ function UngDungDatNuoc() {
             onTransition={xuLyChuyenTrangThaiDon}
             onRetryFromHistory={(orderId) => {
               setStatusNotice(null);
-              setCurrentPendingOrderId(orderId);
-              setCheckoutStatus(null);
-              setManHinhHienTai('checkout');
+              xuLyChuyenTrangThaiDon(orderId, 'PENDING');
             }}
             statusNotice={statusNotice}
             onClearNotice={() => setStatusNotice(null)}

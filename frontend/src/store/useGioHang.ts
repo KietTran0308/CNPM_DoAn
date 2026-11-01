@@ -212,7 +212,15 @@ export const useGioHang = create<TrangThaiGioHang>()(
     }),
     {
       name: 'brewlite_cart_zustand',
-      storage: createJSONStorage(() => localStorage),
+      storage: createJSONStorage(() =>
+        typeof localStorage !== 'undefined'
+          ? localStorage
+          : {
+              getItem: () => null,
+              setItem: () => {},
+              removeItem: () => {},
+            }
+      ),
     }
   )
 );

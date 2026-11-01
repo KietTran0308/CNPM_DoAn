@@ -246,5 +246,74 @@ describe('Kiểm tra chức năng API và Giỏ hàng ứng dụng BrewLite', ()
     const caPheMuoi = products.find((p) => p.name === 'Cà Phê Muối Huế');
     expect(caPheMuoi?.imageUrl).toBe(ANH_MON_NUOC.caPheMuoi);
   });
+
+  test('Mô phỏng thanh toán lỗi (PAYMENT_FAILED) giữ nguyên giỏ hàng và hỗ trợ thử lại (PAYMENT_FAILED -> PENDING -> PAID)', async () => {
+    const { useGioHang } = await import('../src/store/useGioHang');
+
+    useGioHang.getState().clearCart();
+    useGioHang.getState().addToCart({
+      item: {
+        id: 'item_fail_flow_1',
+        orderId: '',
+        productId: 5,
+        size: 'M',
+        qty: 2,
+        lineTotal: 88000,
+      },
+      productName: 'Cà Phê Muối Huế',
+      toppings: [],
+      sugar: '100%',
+      ice: '100%',
+      unitPrice: 44000,
+      stock: 30,
+    });
+
+    expect(useGioHang.getState().getTotalCartCount()).toBe(2);
+    expect(useGioHang.getState().getTotalCartPrice()).toBe(88000);
+
+    const created = await api.createOrder(
+      useGioHang.getState().cartLines.map((l) => l.item),
+      88000
+    );
+    expect(created.status).toBe('PENDING');
+
+    const failPayRes = await api.processPayment(
+      {
+        id: 'pay_sim_fail',
+        orderId: created.orderId,
+        idempotencyKey: 'idemp_fail_' + Date.now(),
+        amount: 88000,
+        method: 'Ví điện tử (MoMo)',
+        simulateFailure: true,
+      },
+      'PAYMENT_FAILED'
+    );
+
+    expect(failPayRes.status).toBe('PAYMENT_FAILED');
+    expect(useGioHang.getState().cartLines.length).toBe(1);
+    expect(useGioHang.getState().getTotalCartCount()).toBe(2);
+    expect(useGioHang.getState().getTotalCartPrice()).toBe(88000);
+
+    const retryPending = await api.transitionOrderStatus(created.orderId, 'PENDING');
+    expect(retryPending.previousStatus).toBe('PAYMENT_FAILED');
+    expect(retryPending.order.status).toBe('PENDING');
+
+    const retryPaid = await api.processPayment(
+      {
+        id: 'pay_sim_retry_ok',
+        orderId: created.orderId,
+        idempotencyKey: 'idemp_retry_ok_' + Date.now(),
+        amount: 88000,
+        method: 'Ví điện tử (MoMo)',
+        simulateFailure: false,
+      },
+      'PAID'
+    );
+    expect(retryPaid.status).toBe('PAID');
+
+    const ordersAfterRetry = await api.getMyOrders();
+    const updatedOrder = ordersAfterRetry.find((o) => o.id === created.orderId);
+    expect(updatedOrder?.status).toBe('PAID');
+  });
 });
 
