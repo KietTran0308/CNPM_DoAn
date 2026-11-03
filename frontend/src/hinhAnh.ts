@@ -28,12 +28,15 @@ export const ANH_MON_NUOC = {
 export function layDuongDanAnh(duongDan?: string): string {
   if (!duongDan || !duongDan.trim()) return '';
   const clean = duongDan.trim().replace(/\\/g, '/');
+
   if (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('data:')) {
     return clean;
   }
+
   if (clean.startsWith('/public/')) {
     return clean.replace(/^\/public/, '');
   }
+
   if (clean.startsWith('public/')) {
     return '/' + clean.replace(/^public\//, '');
   }
