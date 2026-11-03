@@ -233,8 +233,8 @@ describe('Kiểm tra chức năng API và Giỏ hàng ứng dụng BrewLite', ()
     expect(ketQua[0].name).toBe('Cà Phê Muối Huế');
   });
 
-  test('Quản lý hình ảnh tập trung trong src/hinhAnh.ts hoạt động đồng bộ với menu', async () => {
-    const { LOGO, ANH_MAC_DINH, ANH_MON_NUOC, layDuongDanAnh } = await import('../src/hinhAnh');
+  test('Quản lý hình ảnh tập trung trong src/api.ts hoạt động đồng bộ với menu', async () => {
+    const { LOGO, ANH_MAC_DINH, ANH_MON_NUOC, layDuongDanAnh } = await import('../src/api');
     expect(LOGO).toBeDefined();
     expect(typeof ANH_MAC_DINH).toBe('string');
     expect(ANH_MAC_DINH.length).toBeGreaterThan(0);

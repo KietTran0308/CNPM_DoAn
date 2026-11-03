@@ -1,8 +1,16 @@
 import React, { useState } from 'react';
 import { ArrowLeft, ShoppingBag } from 'lucide-react';
-import { Product, User, formatPrice } from '../api';
-import { ANH_MAC_DINH, layDuongDanAnh } from '../hinhAnh';
-import { SizeType, ToppingType, SugarType, IceType } from '../types';
+import {
+  Product,
+  User,
+  formatPrice,
+  ANH_MAC_DINH,
+  layDuongDanAnh,
+  SizeType,
+  ToppingType,
+  SugarType,
+  IceType,
+} from '../api';
 
 interface ChiTietMonProps {
   selectedProduct: Product;

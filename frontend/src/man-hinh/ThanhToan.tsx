@@ -1,7 +1,6 @@
 import React from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { User, OrderStatus, formatPrice } from '../api';
-import { CartLine } from '../types';
+import { User, OrderStatus, formatPrice, CartLine } from '../api';
 
 interface ThanhToanProps {
   user: User | null;

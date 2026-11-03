@@ -1,15 +1,21 @@
 import React, { useState, useMemo } from 'react';
 import { ShoppingBag } from 'lucide-react';
-import { Product, User, formatPrice, removeVietnameseTones } from '../api';
-import { ANH_MAC_DINH, layDuongDanAnh } from '../hinhAnh';
-import { ThanhDieuHuong } from '../components/ThanhDieuHuong';
+import {
+  Product,
+  User,
+  formatPrice,
+  removeVietnameseTones,
+  ANH_MAC_DINH,
+  layDuongDanAnh,
+} from '../api';
 
 interface ThucDonProps {
-  user: User | null;
-  menuOpen: boolean;
-  setMenuOpen: (open: boolean | ((prev: boolean) => boolean)) => void;
-  onNavigateHistory: () => void;
-  onLogout: () => void;
+  header?: React.ReactNode;
+  user?: User | null;
+  menuOpen?: boolean;
+  setMenuOpen?: (open: boolean | ((prev: boolean) => boolean)) => void;
+  onNavigateHistory?: () => void;
+  onLogout?: () => void;
   products: Product[];
   productsLoading: boolean;
   onOpenProductDetail: (productId: number) => void;
@@ -19,11 +25,7 @@ interface ThucDonProps {
 }
 
 export const ThucDon: React.FC<ThucDonProps> = ({
-  user,
-  menuOpen,
-  setMenuOpen,
-  onNavigateHistory,
-  onLogout,
+  header,
   products,
   productsLoading,
   onOpenProductDetail,
@@ -87,13 +89,7 @@ export const ThucDon: React.FC<ThucDonProps> = ({
   return (
     <div className="w-full flex-1 flex flex-col justify-between space-y-6">
       <div className="space-y-5">
-        <ThanhDieuHuong
-          user={user}
-          menuOpen={menuOpen}
-          setMenuOpen={setMenuOpen}
-          onNavigateHistory={onNavigateHistory}
-          onLogout={onLogout}
-        />
+        {header}
 
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5 bg-[#FBF9F5] p-3.5 sm:p-4 rounded-xl border border-[#E2D9C0]">
           <div className="relative flex-1">

@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { LOGO, BACKGROUND } from '../hinhAnh';
+import { LOGO, BACKGROUND } from '../api';
 import './globals.css';
 
 export const metadata: Metadata = {

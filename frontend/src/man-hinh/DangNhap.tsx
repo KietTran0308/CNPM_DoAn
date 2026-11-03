@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LOGO, layDuongDanAnh } from '../hinhAnh';
+import { LOGO, layDuongDanAnh } from '../api';
 
 interface DangNhapProps {
   authMode: 'login' | 'register';
