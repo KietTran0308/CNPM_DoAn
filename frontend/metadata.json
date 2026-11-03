@@ -1,0 +1,7 @@
+{
+  "name": "BrewLite",
+  "description": "Đặt cà phê và trà trực tuyến tại BrewLite",
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
