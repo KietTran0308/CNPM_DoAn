@@ -1,6 +1,6 @@
 import React from 'react';
 import { Order, OrderStatus, User } from '../api';
-import { TienTrinhDon } from '../components/TienTrinhDon';
+import { TienTrinhDon } from './LichSuDon';
 
 interface DatHangThanhCongProps {
   lastOrder: Order | null;

@@ -4,22 +4,23 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "next dev -p 3000",
+    "dev": "next dev -p 3000 --webpack",
     "build": "next build && cp -r public .next/standalone/ 2>/dev/null || true && cp -r .next/static .next/standalone/.next/ 2>/dev/null || true",
     "start": "next start -p 3000",
     "lint": "tsc --noEmit",
     "test": "jest --config=jest.config.cjs"
   },
   "dependencies": {
-    "@tailwindcss/postcss": "^4.3.3",
     "@tanstack/react-query": "^5.105.0",
     "@types/node": "^26.6.5",
+    "autoprefixer": "^10.4.20",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
     "next": "^16.4.3",
-    "postcss": "^8.5.32",
+    "postcss": "^8.4.49",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
+    "tailwindcss": "^3.4.17",
     "zustand": "^5.0.16"
   },
   "devDependencies": {
@@ -28,10 +29,8 @@
     "@types/jest": "^30.0.0",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
     "jest": "^30.5.2",
-    "tailwindcss": "^4.3.3",
     "tsx": "^4.21.0",
     "typescript": "^7.0.2"
   }

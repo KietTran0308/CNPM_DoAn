@@ -1,4 +1,81 @@
-import { ANH_MAC_DINH, ANH_MON_NUOC } from './hinhAnh';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
+export const LOGO = {
+  chinh: '/images/logo.png',
+  favicon: '/images/logo.png',
+  bannerTrangChu: '/images/logo.png',
+};
+
+export const BACKGROUND = '/images/background.png';
+
+export const ANH_MAC_DINH = '/images/caphesua.png';
+
+export const ANH_MON_NUOC = {
+  caPheSua: '/images/caphesua.png',
+  americano: '/images/americano.png',
+  cappuccino: '/images/capuchino.png',
+  traDao: '/images/tradaocamsa.png',
+  caPheMuoi: '/images/caphemuoi.png',
+  caPheTrung: '/images/caphetrung.png',
+  bacXiu: '/images/bacxiu.png',
+  caPheCotDua: '/images/caphecotdua.png',
+  caPheSuaTuoiSuongSao: '/images/caphesuatuoisuongsao.png',
+  traSenVang: '/images/trasenvang.png',
+  traDaoCamSa: '/images/tradaocamsa.png',
+  traVaiHoaHong: '/images/travaihoahong.png',
+  traMangCau: '/images/tramangcau.png',
+  traOLongNhanNhuc: '/images/tralongnhanhatchia.png',
+};
+
+export function layDuongDanAnh(duongDan?: string): string {
+  if (!duongDan || !duongDan.trim()) return '';
+  const clean = duongDan.trim().replace(/\\/g, '/');
+  if (clean.startsWith('http://') || clean.startsWith('https://') || clean.startsWith('data:')) {
+    return clean;
+  }
+  if (clean.startsWith('/public/')) {
+    return clean.replace(/^\/public/, '');
+  }
+  if (clean.startsWith('public/')) {
+    return '/' + clean.replace(/^public\//, '');
+  }
+  if (!clean.startsWith('/')) {
+    return '/' + clean;
+  }
+  return clean;
+}
+
+export const HINH_ANH = {
+  LOGO,
+  BACKGROUND,
+  ANH_MAC_DINH,
+  ANH_MON_NUOC,
+};
+
+export type Screen =
+  | 'auth'
+  | 'menu'
+  | 'product-detail'
+  | 'cart'
+  | 'checkout'
+  | 'success'
+  | 'history';
+
+export type SizeType = 'S' | 'M' | 'L';
+export type ToppingType = 'Trân châu' | 'Kem';
+export type SugarType = '100%' | '70%' | '50%' | '30%' | 'Ít đường';
+export type IceType = '100%' | '70%' | '50%' | 'Ít đá' | 'Đá riêng';
+
+export interface CartLine {
+  item: OrderItem;
+  productName: string;
+  toppings: ToppingType[];
+  sugar: SugarType;
+  ice: IceType;
+  note?: string;
+  unitPrice: number;
+  stock: number;
+}
 
 export const API_BASE_URL: string =
   (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) || '';
@@ -673,3 +750,78 @@ export const api = {
     );
   },
 };
+
+export const QUERY_KEYS = {
+  danhSachMon: ['products'] as const,
+  chiTietMon: (id: number) => ['product', id] as const,
+  lichSuDon: ['orders'] as const,
+};
+
+export function useDanhSachMon() {
+  return useQuery<Product[]>({
+    queryKey: QUERY_KEYS.danhSachMon,
+    queryFn: () => api.getProducts(),
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function useChiTietMon(id: number) {
+  return useQuery<Product | null>({
+    queryKey: QUERY_KEYS.chiTietMon(id),
+    queryFn: () => api.getProductById(id),
+    enabled: Boolean(id),
+  });
+}
+
+export function useLichSuDon() {
+  return useQuery<Order[]>({
+    queryKey: QUERY_KEYS.lichSuDon,
+    queryFn: () => api.getMyOrders(),
+    staleTime: 1000 * 30,
+  });
+}
+
+export function useTaoDonHang() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ items, total }: { items: OrderItem[]; total: number }) =>
+      api.createOrder(items, total),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.lichSuDon });
+    },
+  });
+}
+
+export function useThanhToanDon() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      paymentPayload,
+      trangThaiKetQua,
+    }: {
+      paymentPayload: Payment;
+      trangThaiKetQua?: OrderStatus;
+    }) => api.processPayment(paymentPayload, trangThaiKetQua),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.lichSuDon });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.danhSachMon });
+    },
+  });
+}
+
+export function useCapNhatTrangThaiDon() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      orderId,
+      targetStatus,
+    }: {
+      orderId: string;
+      targetStatus: OrderStatus;
+    }) => api.transitionOrderStatus(orderId, targetStatus),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.lichSuDon });
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.danhSachMon });
+    },
+  });
+}

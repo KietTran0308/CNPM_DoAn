@@ -37,3 +37,8 @@ Thumbs.db
 
 # Testing
 coverage/
+
+# Build cache & workspace metadata
+*.tsbuildinfo
+metadata.json
+bun.lock

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { CartLine } from '../types';
+import { CartLine } from '../api';
 
 export interface MaGiamGia {
   code: string;
