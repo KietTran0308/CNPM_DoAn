@@ -1,5 +1,4 @@
 import { PrismaService } from "../prisma.service";
-import { Prisma } from "@prisma/client";
 export declare class ProductsService {
     private readonly prisma;
     constructor(prisma: PrismaService);
@@ -9,43 +8,39 @@ export declare class ProductsService {
         code: string;
         category: string;
         description: string;
-        price: Prisma.Decimal;
         imageUrl: string;
-        stock: number;
+        imageKey: string;
+        sizePrices: {
+            size: import(".prisma/client").$Enums.Size;
+            price: import("@prisma/client/runtime/library").Decimal;
+        }[];
     }[]>;
     getOptions(id: string): Promise<{
         sizes: {
-            price: Prisma.Decimal;
             size: import(".prisma/client").$Enums.Size;
+            price: import("@prisma/client/runtime/library").Decimal;
         }[];
         toppings: {
             id: string;
             name: string;
             code: string;
-            price: Prisma.Decimal;
+            price: import("@prisma/client/runtime/library").Decimal;
         }[];
     }>;
     findById(id: string): Promise<{
+        sizePrices: {
+            productId: string;
+            size: import(".prisma/client").$Enums.Size;
+            price: import("@prisma/client/runtime/library").Decimal;
+        }[];
+    } & {
         id: string;
         name: string;
         code: string;
         category: string;
         description: string | null;
-        price: Prisma.Decimal;
         imageUrl: string | null;
-        stock: number;
-        version: number;
-        isActive: boolean;
-    }>;
-    decreaseStock(productId: string, quantity: number, tx?: Prisma.TransactionClient): Promise<{
-        id: string;
-        name: string;
-        code: string;
-        category: string;
-        description: string | null;
-        price: Prisma.Decimal;
-        imageUrl: string | null;
-        stock: number;
+        imageKey: string | null;
         version: number;
         isActive: boolean;
     }>;

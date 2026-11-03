@@ -15,6 +15,7 @@ export class ProductsService {
                 category: true,
                 description: true,
                 imageUrl: true,
+                imageKey: true,
                 sizePrices: {
                     select: {
                         size: true,
@@ -38,7 +39,7 @@ export class ProductsService {
             this.prisma.productSizePrice.findMany({
                 where: { productId: id },
                 select: { size: true, price: true },
-                orderBy: { price: "asc" },
+                orderBy: { size: "asc" },
             }),
 
             this.prisma.topping.findMany({
@@ -61,6 +62,11 @@ export class ProductsService {
             where: {
                 id,
                 isActive: true,
+            },
+            include: {
+                sizePrices: {
+                    orderBy: { size: "asc" },
+                },
             },
         });
 

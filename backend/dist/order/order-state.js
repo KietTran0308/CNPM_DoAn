@@ -7,13 +7,13 @@ const common_1 = require("@nestjs/common");
 const client_1 = require("@prisma/client");
 Object.defineProperty(exports, "OrderStatus", { enumerable: true, get: function () { return client_1.OrderStatus; } });
 exports.ALLOWED_TRANSITIONS = {
-    PENDING: ['PAID', 'PAYMENT_FAILED', 'CANCELLED'],
-    PAYMENT_FAILED: ['PENDING', 'CANCELLED'],
-    PAID: ['PREPARING', 'CANCELLED'],
-    PREPARING: ['READY'],
-    READY: ['COMPLETED'],
-    COMPLETED: [],
-    CANCELLED: [],
+    [client_1.OrderStatus.PENDING]: [client_1.OrderStatus.PAID, client_1.OrderStatus.PAYMENT_FAILED, client_1.OrderStatus.CANCELLED],
+    [client_1.OrderStatus.PAYMENT_FAILED]: [client_1.OrderStatus.PENDING, client_1.OrderStatus.CANCELLED],
+    [client_1.OrderStatus.PAID]: [client_1.OrderStatus.PREPARING, client_1.OrderStatus.CANCELLED],
+    [client_1.OrderStatus.PREPARING]: [client_1.OrderStatus.READY],
+    [client_1.OrderStatus.READY]: [client_1.OrderStatus.COMPLETED],
+    [client_1.OrderStatus.COMPLETED]: [],
+    [client_1.OrderStatus.CANCELLED]: [],
 };
 function canTransition(from, to) {
     return exports.ALLOWED_TRANSITIONS[from].includes(to);

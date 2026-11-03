@@ -1,14 +1,15 @@
-import { Test, TestingModule } from "@nestjs/testing";
-import { ProductsService } from "./products.service";
-import { NotFoundException } from "@nestjs/common";
-import { PrismaService } from "../prisma.service";
+import { NotFoundException } from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
+import { Prisma } from '@prisma/client';
+import { PrismaService } from '../prisma.service';
+import { ProductsService } from './products.service';
+
+const PRODUCT_ID = 'c2109f91-894f-5836-872b-fc4c0f04ca5d';
 
 const mockPrismaService = {
     product: {
         findMany: jest.fn(),
         findFirst: jest.fn(),
-        findUnique: jest.fn(),
-        updateMany: jest.fn(),
     },
     productSizePrice: {
         findMany: jest.fn(),
@@ -18,9 +19,8 @@ const mockPrismaService = {
     },
 };
 
-describe("ProductsService", () => {
+describe('ProductsService', () => {
     let service: ProductsService;
-    let prisma: PrismaService;
 
     beforeEach(async () => {
         jest.clearAllMocks();
@@ -30,85 +30,103 @@ describe("ProductsService", () => {
                 { provide: PrismaService, useValue: mockPrismaService },
             ],
         }).compile();
-
         service = module.get<ProductsService>(ProductsService);
-        prisma = module.get<PrismaService>(PrismaService);
     });
 
-    it("should be defined", () => {
-        expect(service).toBeDefined();
+    it('lay danh sach san pham voi imageKey va sizePrices tu PostgreSQL', async () => {
+        const products = [
+            {
+                id: PRODUCT_ID,
+                code: 'BL001',
+                name: 'Cà phê sữa',
+                category: 'Cà phê',
+                description: 'Cà phê và sữa',
+                imageUrl: null,
+                imageKey: 'caPheSua',
+                sizePrices: [
+                    { size: 'S', price: new Prisma.Decimal(35000) },
+                    { size: 'M', price: new Prisma.Decimal(35000) },
+                    { size: 'L', price: new Prisma.Decimal(35000) },
+                ],
+            },
+        ];
+        mockPrismaService.product.findMany.mockResolvedValue(products);
+
+        const result = await service.findAll();
+
+        expect(result).toEqual(products);
+        expect(result[0].sizePrices).toHaveLength(3);
+        expect(result[0].sizePrices[0].price.toString()).toBe('35000');
+        expect(result[0].imageKey).toBe('caPheSua');
+        expect(mockPrismaService.product.findMany).toHaveBeenCalledWith(
+            expect.objectContaining({
+                where: { isActive: true },
+                select: expect.objectContaining({
+                    imageKey: true,
+                    sizePrices: expect.objectContaining({
+                        orderBy: { size: 'asc' },
+                    }),
+                }),
+            }),
+        );
     });
 
-    describe("findAll", () => {
-        it("phải trả về danh sách sản phẩm", async () => {
-            const expectedProducts = [{ id: 1, name: "Sản phẩm 1" }];
-            mockPrismaService.product.findMany.mockResolvedValue(expectedProducts);
+    it('tra ve mang rong khi khong co san pham dang ban', async () => {
+        mockPrismaService.product.findMany.mockResolvedValue([]);
+        const result = await service.findAll();
+        expect(result).toEqual([]);
+    });
 
-            const result = await service.findAll();
-            expect(result).toEqual(expectedProducts);
-            expect(mockPrismaService.product.findMany).toHaveBeenCalled();
+    it('lay chi tiet san pham kem bang gia theo size', async () => {
+        const product = {
+            id: PRODUCT_ID,
+            name: 'Cà phê sữa',
+            isActive: true,
+            sizePrices: [{ size: 'M', price: new Prisma.Decimal(35000) }],
+        };
+        mockPrismaService.product.findFirst.mockResolvedValue(product);
+
+        await expect(service.findById(PRODUCT_ID)).resolves.toEqual(product);
+        expect(mockPrismaService.product.findFirst).toHaveBeenCalledWith({
+            where: { id: PRODUCT_ID, isActive: true },
+            include: { sizePrices: { orderBy: { size: 'asc' } } },
         });
     });
 
-    describe("findAll", () => {
-        it("phải trả về danh sách sản phẩm kèm theo giá theo size", async () => {
-            const expectedProducts = [
-                {
-                    id: "product-1",
-                    code: "CF001",
-                    name: "Cà phê sữa",
-                    category: "COFFEE",
-                    description: "Cà phê sữa",
-                    imageUrl: null,
-                    productSizePrices: [
-                        { size: "M", price: 30000 },
-                        { size: "L", price: 35000 },
-                    ],
-                },
-            ];
-            mockPrismaService.product.findMany.mockResolvedValue(expectedProducts);
-
-            const result = await service.findAll();
-
-            expect(result).toEqual(expectedProducts);
-            // Kiểm tra mảng giá theo size có 2 phần tử như đã mock
-            expect(result[0].productSizePrices).toHaveLength(2);
-            // Kiểm tra giá của size M
-            expect(result[0].productSizePrices[0].price).toBe(30000);
-            expect(mockPrismaService.product.findMany).toHaveBeenCalled();
-        });
+    it('bao NotFoundException khi san pham khong ton tai/ngung ban', async () => {
+        mockPrismaService.product.findFirst.mockResolvedValue(null);
+        await expect(service.findById(PRODUCT_ID)).rejects.toThrow(NotFoundException);
     });
 
-    describe("findById", () => {
-        const productId = "00000000-0000-5000-8000-000000000001";
-
-        it("phải trả về sản phẩm khi ID hợp lệ", async () => {
-            const expectedProduct = {
-                id: productId,
-                name: "Cappuccino",
-                isActive: true,
-            };
-
-            mockPrismaService.product.findFirst.mockResolvedValue(expectedProduct);
-
-            const result = await service.findById(productId);
-
-            expect(result).toEqual(expectedProduct);
-
-            expect(mockPrismaService.product.findFirst).toHaveBeenCalledWith({
-                where: {
-                    id: productId,
-                    isActive: true,
-                },
-            });
+    it('tra ve size theo thu tu S/M/L va danh sach topping', async () => {
+        mockPrismaService.product.findFirst.mockResolvedValue({
+            id: PRODUCT_ID,
+            isActive: true,
+            sizePrices: [],
         });
+        const sizes = [
+            { size: 'S', price: new Prisma.Decimal(35000) },
+            { size: 'M', price: new Prisma.Decimal(35000) },
+            { size: 'L', price: new Prisma.Decimal(35000) },
+        ];
+        const toppings = [
+            { id: '3075f104-4b54-59d0-a5af-0d8fa3ab2828', code: 'TP001', name: 'Trân châu đen', price: new Prisma.Decimal(5000) },
+        ];
+        mockPrismaService.productSizePrice.findMany.mockResolvedValue(sizes);
+        mockPrismaService.topping.findMany.mockResolvedValue(toppings);
 
-        it("phải ném lỗi NotFoundException khi ID không tồn tại", async () => {
-            mockPrismaService.product.findFirst.mockResolvedValue(null);
+        const result = await service.getOptions(PRODUCT_ID);
 
-            await expect(
-                service.findById("00000000-0000-5000-8000-000000000999"),
-            ).rejects.toThrow(NotFoundException);
+        expect(result).toEqual({ sizes, toppings });
+        expect(mockPrismaService.productSizePrice.findMany).toHaveBeenCalledWith({
+            where: { productId: PRODUCT_ID },
+            select: { size: true, price: true },
+            orderBy: { size: 'asc' },
+        });
+        expect(mockPrismaService.topping.findMany).toHaveBeenCalledWith({
+            where: { isActive: true },
+            select: { id: true, code: true, name: true, price: true },
+            orderBy: { name: 'asc' },
         });
     });
 });

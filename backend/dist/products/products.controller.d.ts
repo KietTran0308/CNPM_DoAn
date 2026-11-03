@@ -8,14 +8,17 @@ export declare class ProductsController {
         code: string;
         category: string;
         description: string;
-        price: import("@prisma/client/runtime/library").Decimal;
         imageUrl: string;
-        stock: number;
+        imageKey: string;
+        sizePrices: {
+            size: import(".prisma/client").$Enums.Size;
+            price: import("@prisma/client/runtime/library").Decimal;
+        }[];
     }[]>;
     getOptions(id: string): Promise<{
         sizes: {
-            price: import("@prisma/client/runtime/library").Decimal;
             size: import(".prisma/client").$Enums.Size;
+            price: import("@prisma/client/runtime/library").Decimal;
         }[];
         toppings: {
             id: string;
@@ -25,14 +28,19 @@ export declare class ProductsController {
         }[];
     }>;
     findById(id: string): Promise<{
+        sizePrices: {
+            productId: string;
+            size: import(".prisma/client").$Enums.Size;
+            price: import("@prisma/client/runtime/library").Decimal;
+        }[];
+    } & {
         id: string;
         name: string;
         code: string;
         category: string;
         description: string | null;
-        price: import("@prisma/client/runtime/library").Decimal;
         imageUrl: string | null;
-        stock: number;
+        imageKey: string | null;
         version: number;
         isActive: boolean;
     }>;

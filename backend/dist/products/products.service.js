@@ -25,11 +25,21 @@ let ProductsService = class ProductsService {
                 name: true,
                 category: true,
                 description: true,
-                price: true,
                 imageUrl: true,
-                stock: true,
+                imageKey: true,
+                sizePrices: {
+                    select: {
+                        size: true,
+                        price: true,
+                    },
+                    orderBy: {
+                        size: "asc",
+                    },
+                },
             },
-            orderBy: { name: 'asc' },
+            orderBy: {
+                name: "asc",
+            },
         });
     }
     async getOptions(id) {
@@ -38,7 +48,7 @@ let ProductsService = class ProductsService {
             this.prisma.productSizePrice.findMany({
                 where: { productId: id },
                 select: { size: true, price: true },
-                orderBy: { price: 'asc' },
+                orderBy: { size: "asc" },
             }),
             this.prisma.topping.findMany({
                 where: { isActive: true },
@@ -48,7 +58,7 @@ let ProductsService = class ProductsService {
                     name: true,
                     price: true,
                 },
-                orderBy: { name: 'asc' },
+                orderBy: { name: "asc" },
             }),
         ]);
         return { sizes, toppings };
@@ -59,41 +69,16 @@ let ProductsService = class ProductsService {
                 id,
                 isActive: true,
             },
+            include: {
+                sizePrices: {
+                    orderBy: { size: "asc" },
+                },
+            },
         });
         if (!product) {
             throw new common_1.NotFoundException("Không tìm thấy món");
         }
         return product;
-    }
-    async decreaseStock(productId, quantity, tx) {
-        const db = tx ?? this.prisma;
-        if (!Number.isInteger(quantity) || quantity <= 0) {
-            throw new common_1.BadRequestException("Số lượng không hợp lệ");
-        }
-        const product = await db.product.findUnique({
-            where: { id: productId },
-        });
-        if (!product || !product.isActive) {
-            throw new common_1.NotFoundException("Sản phẩm không tồn tại");
-        }
-        const result = await db.product.updateMany({
-            where: {
-                id: productId,
-                version: product.version,
-                stock: { gte: quantity },
-                isActive: true,
-            },
-            data: {
-                stock: { decrement: quantity },
-                version: { increment: 1 },
-            },
-        });
-        if (result.count === 0) {
-            throw new common_1.BadRequestException("Không đủ tồn kho hoặc sản phẩm đã thay đổi");
-        }
-        return db.product.findUnique({
-            where: { id: productId },
-        });
     }
 };
 exports.ProductsService = ProductsService;

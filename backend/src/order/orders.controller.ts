@@ -10,7 +10,9 @@ import {
     IsEnum,
     IsIn,
     IsInt,
+    Max,
     IsOptional,
+    ValidateIf,
     IsString,
     IsUUID,
     MaxLength,
@@ -34,6 +36,17 @@ import {
 import { JwtGuard, CurrentUser } from "../auth/jwt.guard";
 import { OrdersService } from "./orders.service";
 
+// Chọn nhiều suất cùng topping; giữ toppingIds để tương thích frontend cũ.
+export class OrderToppingDto {
+    @IsUUID("all")
+    toppingId!: string;
+
+    @IsInt()
+    @Min(1)
+    @Max(100)
+    servings!: number;
+}
+
 export class OrderItemDto {
     @IsUUID("all")
     productId!: string;
@@ -43,13 +56,21 @@ export class OrderItemDto {
 
     @IsInt()
     @Min(1)
+    @Max(2147483647)
     qty!: number;
 
-    @IsOptional()
+    @ValidateIf((_obj, value) => value !== undefined)
     @IsArray()
     @ArrayUnique()
     @IsUUID("all", { each: true })
     toppingIds?: string[];
+
+    @ValidateIf((_obj, value) => value !== undefined)
+    @IsArray()
+    @ArrayUnique((t: OrderToppingDto | null) => t?.toppingId)
+    @ValidateNested({ each: true })
+    @Type(() => OrderToppingDto)
+    toppings?: OrderToppingDto[];
 }
 
 export class CreateOrderDto {
@@ -67,6 +88,7 @@ export class CreateOrderDto {
     @IsOptional()
     @IsInt()
     @Min(0)
+    @Max(2147483647)
     pointsToUse?: number;
 }
 

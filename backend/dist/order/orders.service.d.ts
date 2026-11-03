@@ -1,8 +1,11 @@
-import { OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma.service';
-import { ProductsService } from '../products/products.service';
-import type { CreateOrderDto, OrderItemDto } from './orders.controller';
+import { OnModuleInit, OnModuleDestroy } from "@nestjs/common";
+import { Prisma } from "@prisma/client";
+import { PrismaService } from "../prisma.service";
+import type { CreateOrderDto, OrderItemDto } from "./orders.controller";
+export declare function normalizeToppingSelections(item: OrderItemDto): Array<{
+    toppingId: string;
+    servings: number;
+}>;
 export declare class PricingService {
     calculateItem(tx: Prisma.TransactionClient, item: OrderItemDto): Promise<{
         product: {
@@ -11,19 +14,22 @@ export declare class PricingService {
             code: string;
             category: string;
             description: string | null;
-            price: Prisma.Decimal;
             imageUrl: string | null;
-            stock: number;
+            imageKey: string | null;
             version: number;
             isActive: boolean;
         };
         toppings: {
-            id: string;
-            name: string;
-            code: string;
-            price: Prisma.Decimal;
-            isActive: boolean;
+            topping: {
+                id: string;
+                name: string;
+                code: string;
+                isActive: boolean;
+                price: Prisma.Decimal;
+            };
+            servings: number;
         }[];
+        basePrice: number;
         unitPrice: number;
         lineTotal: number;
     }>;
@@ -31,8 +37,7 @@ export declare class PricingService {
 export declare class OrdersService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma;
     private readonly pricingService;
-    private readonly productsService;
-    constructor(prisma: PrismaService, pricingService: PricingService, productsService: ProductsService);
+    constructor(prisma: PrismaService, pricingService: PricingService);
     private expiryTimer?;
     onModuleInit(): void;
     onModuleDestroy(): void;
@@ -58,9 +63,8 @@ export declare class OrdersService implements OnModuleInit, OnModuleDestroy {
                 code: string;
                 category: string;
                 description: string | null;
-                price: Prisma.Decimal;
                 imageUrl: string | null;
-                stock: number;
+                imageKey: string | null;
                 version: number;
                 isActive: boolean;
             };
@@ -69,14 +73,15 @@ export declare class OrdersService implements OnModuleInit, OnModuleDestroy {
                     id: string;
                     name: string;
                     code: string;
-                    price: Prisma.Decimal;
                     isActive: boolean;
+                    price: Prisma.Decimal;
                 };
             } & {
                 id: string;
                 price: Prisma.Decimal;
-                toppingId: string;
+                servings: number;
                 orderItemId: string;
+                toppingId: string;
             })[];
         } & {
             id: string;
@@ -84,6 +89,7 @@ export declare class OrdersService implements OnModuleInit, OnModuleDestroy {
             size: import(".prisma/client").$Enums.Size;
             qty: number;
             orderId: string;
+            basePrice: Prisma.Decimal;
             unitPrice: Prisma.Decimal;
             lineTotal: Prisma.Decimal;
         })[];
@@ -96,6 +102,8 @@ export declare class OrdersService implements OnModuleInit, OnModuleDestroy {
             amount: Prisma.Decimal;
             method: import(".prisma/client").$Enums.PaymentMethod;
             providerRef: string | null;
+            refundedAmount: Prisma.Decimal;
+            refundedAt: Date | null;
         }[];
         statusHistory: {
             id: string;
@@ -121,7 +129,7 @@ export declare class OrdersService implements OnModuleInit, OnModuleDestroy {
         idempotencyKey: string | null;
         requestHash: string | null;
     })[]>;
-    changeStatus(orderId: string, newStatus: 'PREPARING' | 'READY' | 'COMPLETED', role: string): Promise<{
+    changeStatus(orderId: string, newStatus: "PREPARING" | "READY" | "COMPLETED", role: string, performedBy?: string): Promise<{
         id: string;
         createdAt: Date;
         orderCode: number;
@@ -155,4 +163,5 @@ export declare class OrdersService implements OnModuleInit, OnModuleDestroy {
         idempotencyKey: string | null;
         requestHash: string | null;
     }>;
+    private consumeIngredients;
 }

@@ -5,7 +5,7 @@ import {
     Injectable,
     NotFoundException,
 } from '@nestjs/common';
-import { OrderStatus, Prisma } from '@prisma/client';
+import { OrderStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { assertTransition } from '../order/order-state';
 import type { PaymentDto } from './payments.controller';
@@ -25,7 +25,7 @@ export class PaymentsService {
         userId: string,
         dto: PaymentDto,
     ) {
-        const expectedStatus = dto.simulateFailure === true ? 'FAILED' : 'SUCCESS';
+        const expectedStatus = dto.simulateFailure === true ? PaymentStatus.FAILED : PaymentStatus.SUCCESS;
         if (
             payment.orderId !== dto.orderId ||
             payment.order.userId !== userId ||
@@ -93,6 +93,16 @@ export class PaymentsService {
                     currentStatus = OrderStatus.PENDING;
                 }
 
+                if (currentStatus === OrderStatus.CANCELLED) {
+                    throw new ConflictException('Đơn đã hủy, không thể thanh toán');
+                }
+                if (currentStatus === OrderStatus.PAID ||
+                    currentStatus === OrderStatus.PREPARING ||
+                    currentStatus === OrderStatus.READY ||
+                    currentStatus === OrderStatus.COMPLETED) {
+                    throw new ConflictException('Đơn đã thanh toán, không thể thanh toán lần hai');
+                }
+
                 assertTransition(currentStatus, targetStatus);
                 const updated = await tx.order.updateMany({
                     where: { id: order.id, status: currentStatus },
@@ -128,16 +138,47 @@ export class PaymentsService {
                     if (used.count !== 1) {
                         throw new ConflictException('Mã giảm giá đã hết hạn hoặc hết lượt');
                     }
-                    const owned = await tx.userVoucher.findUnique({where: {couponId: coupon.id}});
+
+                    const owned = await tx.userVoucher.findUnique({
+                        where: {
+                            userId_couponId: {
+                                userId,
+                                couponId: coupon.id,
+                            },
+                        },
+                    });
+
                     if (owned) {
-                        if (owned.userId !== userId || owned.usedAt) {
-                            throw new ConflictException('Voucher đã dùng hoặc không thuộc tài khoản');
-                        }
                         const consumed = await tx.userVoucher.updateMany({
-                            where: {id: owned.id, userId, usedAt: null},
-                            data: {usedAt: now},
+                            where: {
+                                id: owned.id,
+                                userId,
+                                usedAt: null,
+                                usedOrderId: null,
+                            },
+                            data: {
+                                usedAt: now,
+                                usedOrderId: order.id,
+                            },
                         });
-                        if (consumed.count !== 1) throw new ConflictException('Voucher đã được sử dụng');
+
+                        if (consumed.count !== 1) {
+                            throw new ConflictException(
+                                "Voucher đã được sử dụng",
+                            );
+                        }
+                    } else {
+                        // Không cho dùng voucher cá nhân của người khác.
+                        const privateVoucher = await tx.userVoucher.findFirst({
+                            where: { couponId: coupon.id },
+                            select: { id: true },
+                        });
+
+                        if (privateVoucher) {
+                            throw new ForbiddenException(
+                                "Voucher không thuộc tài khoản",
+                            );
+                        }
                     }
                 }
 
@@ -166,32 +207,17 @@ export class PaymentsService {
                         idempotencyKey,
                         amount: order.total,
                         method: dto.method,
-                        status: dto.simulateFailure === true ? 'FAILED' : 'SUCCESS',
+                        status: dto.simulateFailure === true ? PaymentStatus.FAILED : PaymentStatus.SUCCESS,
                     },
                 });
 
-                const earnedPoints = targetStatus === OrderStatus.PAID
-                    ? Math.floor(Number(order.total) / 10000)
-                    : 0;
-                if (earnedPoints > 0) {
-                    await tx.user.update({
-                        where: { id: userId },
-                        data: { loyaltyPoints: { increment: earnedPoints } },
-                    });
-                    await tx.loyaltyTransaction.create({
-                        data: {
-                            userId,
-                            orderId: order.id,
-                            points: earnedPoints,
-                            type: 'EARN',
-                        },
-                    });
-                }
+                // EARN chỉ ghi khi đơn chuyển READY -> COMPLETED
+                // trong OrdersService.changeStatus().
 
                 const savedOrder = await tx.order.findUniqueOrThrow({
                     where: { id: order.id },
                 });
-                return { replay: false, order: savedOrder, payment, earnedPoints };
+                return { replay: false, order: savedOrder, payment, earnedPoints: 0 };
             }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
         } catch (error: any) {
             // Nếu request khác đã commit cùng key, trả kết quả cũ.

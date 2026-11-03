@@ -1,12 +1,17 @@
-import { Size } from '@prisma/client';
+import { Size } from "@prisma/client";
 export { Size as ProductSize };
-import { CurrentUser } from '../auth/jwt.guard';
-import { OrdersService } from './orders.service';
+import { CurrentUser } from "../auth/jwt.guard";
+import { OrdersService } from "./orders.service";
+export declare class OrderToppingDto {
+    toppingId: string;
+    servings: number;
+}
 export declare class OrderItemDto {
     productId: string;
     size: Size;
     qty: number;
     toppingIds?: string[];
+    toppings?: OrderToppingDto[];
 }
 export declare class CreateOrderDto {
     items: OrderItemDto[];
@@ -14,7 +19,7 @@ export declare class CreateOrderDto {
     pointsToUse?: number;
 }
 export declare class StatusDto {
-    status: 'PREPARING' | 'READY' | 'COMPLETED';
+    status: "PREPARING" | "READY" | "COMPLETED";
 }
 export declare class OrdersController {
     private readonly ordersService;
@@ -44,9 +49,8 @@ export declare class OrdersController {
                 code: string;
                 category: string;
                 description: string | null;
-                price: import("@prisma/client/runtime/library").Decimal;
                 imageUrl: string | null;
-                stock: number;
+                imageKey: string | null;
                 version: number;
                 isActive: boolean;
             };
@@ -55,14 +59,15 @@ export declare class OrdersController {
                     id: string;
                     name: string;
                     code: string;
-                    price: import("@prisma/client/runtime/library").Decimal;
                     isActive: boolean;
+                    price: import("@prisma/client/runtime/library").Decimal;
                 };
             } & {
                 id: string;
                 price: import("@prisma/client/runtime/library").Decimal;
-                toppingId: string;
+                servings: number;
                 orderItemId: string;
+                toppingId: string;
             })[];
         } & {
             id: string;
@@ -70,6 +75,7 @@ export declare class OrdersController {
             size: import(".prisma/client").$Enums.Size;
             qty: number;
             orderId: string;
+            basePrice: import("@prisma/client/runtime/library").Decimal;
             unitPrice: import("@prisma/client/runtime/library").Decimal;
             lineTotal: import("@prisma/client/runtime/library").Decimal;
         })[];
@@ -82,6 +88,8 @@ export declare class OrdersController {
             amount: import("@prisma/client/runtime/library").Decimal;
             method: import(".prisma/client").$Enums.PaymentMethod;
             providerRef: string | null;
+            refundedAmount: import("@prisma/client/runtime/library").Decimal;
+            refundedAt: Date | null;
         }[];
         statusHistory: {
             id: string;

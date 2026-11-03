@@ -51,6 +51,8 @@ export declare class PaymentsService {
             amount: Prisma.Decimal;
             method: import(".prisma/client").$Enums.PaymentMethod;
             providerRef: string | null;
+            refundedAmount: Prisma.Decimal;
+            refundedAt: Date | null;
         };
     } | {
         replay: boolean;
@@ -80,6 +82,8 @@ export declare class PaymentsService {
             amount: Prisma.Decimal;
             method: import(".prisma/client").$Enums.PaymentMethod;
             providerRef: string | null;
+            refundedAmount: Prisma.Decimal;
+            refundedAt: Date | null;
         };
         earnedPoints: number;
     }>;

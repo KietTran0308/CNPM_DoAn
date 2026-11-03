@@ -15,6 +15,41 @@ import { PrismaService } from "../prisma.service";
 import type { CreateOrderDto, OrderItemDto } from "./orders.controller";
 import { assertTransition } from "./order-state";
 
+// Chấp nhận cả payload cũ toppingIds[] (1 suất) và payload mới toppings[].
+// Không nhận đồng thời cả hai cách để tránh tính giá không rõ ràng.
+export function normalizeToppingSelections(item: OrderItemDto): Array<{
+    toppingId: string;
+    servings: number;
+}> {
+    if (item.toppings !== undefined && item.toppingIds !== undefined) {
+        throw new BadRequestException("Chỉ gửi toppings hoặc toppingIds, không gửi cả hai");
+    }
+    if (item.toppings !== undefined && !Array.isArray(item.toppings)) {
+        throw new BadRequestException("toppings phải là mảng");
+    }
+    if (item.toppingIds !== undefined && !Array.isArray(item.toppingIds)) {
+        throw new BadRequestException("toppingIds phải là mảng");
+    }
+
+    const selections = item.toppings ?? (item.toppingIds ?? []).map((toppingId) => ({
+        toppingId,
+        servings: 1,
+    }));
+    for (const selection of selections) {
+        if (!selection || typeof selection.toppingId !== "string" || !selection.toppingId.trim()) {
+            throw new BadRequestException("Mã topping không hợp lệ");
+        }
+        if (!Number.isInteger(selection.servings) || selection.servings < 1 || selection.servings > 100) {
+            throw new BadRequestException("Số suất topping phải từ 1 đến 100");
+        }
+    }
+    const ids = selections.map((s) => s.toppingId);
+    if (new Set(ids).size !== ids.length) {
+        throw new BadRequestException("Topping không được lặp lại");
+    }
+    return selections;
+}
+
 // ======================================================
 // PRICING SERVICE
 // ======================================================
@@ -22,7 +57,7 @@ import { assertTransition } from "./order-state";
 @Injectable()
 export class PricingService {
     async calculateItem(tx: Prisma.TransactionClient, item: OrderItemDto) {
-        if (!Number.isInteger(item.qty) || item.qty < 1) {
+        if (!Number.isInteger(item.qty) || item.qty < 1 || item.qty > 2147483647) {
             throw new BadRequestException("Số lượng phải lớn hơn 0");
         }
 
@@ -47,30 +82,31 @@ export class PricingService {
             throw new BadRequestException("Sản phẩm không hỗ trợ size này");
         }
 
-        const toppingIds = item.toppingIds ?? [];
+        const selections = normalizeToppingSelections(item);
+        const toppingIds = selections.map((selection) => selection.toppingId);
 
-        if (new Set(toppingIds).size !== toppingIds.length) {
-            throw new BadRequestException("Topping không được lặp lại");
-        }
-
-        const toppings = await tx.topping.findMany({
+        const dbToppings = await tx.topping.findMany({
             where: {
                 id: { in: toppingIds },
                 isActive: true,
             },
         });
 
-        if (toppings.length !== toppingIds.length) {
+        if (dbToppings.length !== toppingIds.length) {
             throw new BadRequestException("Topping không tồn tại hoặc đã ngừng bán");
         }
 
-        // Giá product_size_prices là giá đầy đủ của size.
-        const basePrice = Number(variant.price);
+        const toppingById = new Map(dbToppings.map((t) => [t.id, t]));
+        const toppings = selections.map((selection) => ({
+            topping: toppingById.get(selection.toppingId)!,
+            servings: selection.servings,
+        }));
 
-        // DTO hiện tại chỉ nhận toppingIds nên mỗi topping
-        // mặc định có 1 serving.
+        // Gia product_size_prices la gia day du cho tung size.
+        const basePrice = Number(variant.price);
         const toppingTotal = toppings.reduce(
-            (sum, topping) => sum + Number(topping.price),
+            (sum, selection) =>
+                sum + Number(selection.topping.price) * selection.servings,
             0,
         );
 
@@ -182,7 +218,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                 productId: item.productId,
                 size: item.size,
                 qty: item.qty,
-                toppingIds: [...(item.toppingIds ?? [])].sort(),
+                toppings: [...normalizeToppingSelections(item)]
+                    .sort((a, b) => a.toppingId.localeCompare(b.toppingId)),
             }))
             .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
 
@@ -219,7 +256,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                 async (tx) => {
                     let subtotal = 0;
 
-                    const orderItems: Prisma.OrderItemCreateWithoutOrderInput[] = [];
+                    const orderItems: Prisma.OrderItemUncheckedCreateWithoutOrderInput[] = [];
 
                     // Tính giá từng sản phẩm.
                     for (const item of dto.items) {
@@ -228,9 +265,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                         subtotal += result.lineTotal;
 
                         orderItems.push({
-                            product: {
-                                connect: { id: result.product.id },
-                            },
+                            productId: result.product.id,
                             size: item.size,
                             qty: item.qty,
                             basePrice: result.basePrice,
@@ -238,12 +273,10 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                             lineTotal: result.lineTotal,
 
                             toppings: {
-                                create: result.toppings.map((topping) => ({
-                                    topping: {
-                                        connect: { id: topping.id },
-                                    },
+                                create: result.toppings.map(({ topping, servings }) => ({
+                                    toppingId: topping.id,
                                     price: topping.price,
-                                    servings: 1,
+                                    servings,
                                 })),
                             },
                         });
@@ -295,6 +328,18 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                             (ownedVoucher.usedAt || ownedVoucher.usedOrderId)
                         ) {
                             throw new BadRequestException("Voucher đã được sử dụng");
+                        }
+
+                        if (!ownedVoucher) {
+                            // Nhất quán với PaymentsService: coupon đã cấp dạng
+                            // voucher cá nhân cho người khác thì không còn là mã công khai.
+                            const privateVoucher = await tx.userVoucher.findFirst({
+                                where: { couponId: coupon.id },
+                                select: { id: true },
+                            });
+                            if (privateVoucher) {
+                                throw new ForbiddenException("Voucher không thuộc tài khoản");
+                            }
                         }
 
                         couponId = coupon.id;
@@ -527,6 +572,28 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                         throw new ConflictException("Trạng thái đơn đã bị thay đổi");
                     }
 
+                    // Chỉ thưởng điểm khi đơn đã phục vụ xong.
+                    // Đơn PAID có thể hủy, nên không cộng điểm trước COMPLETED.
+                    if (newStatus === OrderStatus.COMPLETED) {
+                        const earnedPoints = Math.floor(Number(order.total) / 10000);
+                        if (earnedPoints > 0) {
+                            await tx.user.update({
+                                where: { id: order.userId },
+                                data: {
+                                    loyaltyPoints: { increment: earnedPoints },
+                                },
+                            });
+                            await tx.loyaltyTransaction.create({
+                                data: {
+                                    userId: order.userId,
+                                    orderId,
+                                    points: earnedPoints,
+                                    type: "EARN",
+                                },
+                            });
+                        }
+                    }
+
                     await tx.orderStatusHistory.create({
                         data: {
                             orderId,
@@ -631,7 +698,10 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                             },
                             data: {
                                 refundedAmount: payment.amount,
-                                refundedAt: new Date(),
+                                // CHECK: so tien hoan = 0 thi refundedAt phai NULL.
+                                refundedAt: payment.amount.greaterThan(0)
+                                    ? new Date()
+                                    : null,
                             },
                         });
 
@@ -678,55 +748,29 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                         // REVERSE LOYALTY POINTS
                         // --------------------------------------------
 
-                        const movements = await tx.loyaltyTransaction.findMany({
-                            where: {
-                                orderId,
-                                type: {
-                                    in: ["EARN", "REDEEM"],
-                                },
-                            },
-                        });
-
-                        const earned =
-                            movements.find((m) => m.type === "EARN")?.points ?? 0;
-
-                        const redeemed =
-                            movements.find((m) => m.type === "REDEEM")?.points ?? 0;
-
-                        // Điểm cần điều chỉnh:
-                        // - Hoàn lại điểm đã dùng.
-                        // - Thu hồi điểm đã nhận.
-                        const difference = redeemed - earned;
-
-                        if (difference !== 0) {
-                            const updatedUser = await tx.user.updateMany({
-                                where: {
-                                    id: userId,
-                                    loyaltyPoints: {
-                                        gte: Math.max(0, -difference),
-                                    },
-                                },
-                                data: {
-                                    loyaltyPoints: {
-                                        increment: difference,
-                                    },
-                                },
+                        // Với chính sách thưởng điểm khi COMPLETED,
+                        // đơn PAID được hủy chỉ cần hoàn điểm đã REDEEM.
+                        if (order.pointsUsed > 0) {
+                            const redeemed = await tx.loyaltyTransaction.findFirst({
+                                where: { orderId, type: "REDEEM" },
                             });
-
-                            if (updatedUser.count !== 1) {
+                            if (!redeemed || redeemed.points !== order.pointsUsed) {
                                 throw new ConflictException(
-                                    "Không đủ điểm để thu hồi thưởng; cần xử lý thủ công",
+                                    "Dữ liệu điểm đã sử dụng không khớp",
                                 );
                             }
 
-                            // SQL giới hạn một bản ghi REVERSAL cho mỗi đơn.
-                            // points phải là số dương; chiều đảo được xác định
-                            // từ các giao dịch EARN/REDEEM gốc.
+                            await tx.user.update({
+                                where: { id: userId },
+                                data: {
+                                    loyaltyPoints: { increment: redeemed.points },
+                                },
+                            });
                             await tx.loyaltyTransaction.create({
                                 data: {
                                     userId,
                                     orderId,
-                                    points: Math.abs(difference),
+                                    points: redeemed.points,
                                     type: "REVERSAL",
                                 },
                             });
@@ -860,7 +904,10 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         }
 
         // 5. Kiểm tra và trừ kho.
-        for (const [ingredientId, requiredQuantity] of requiredIngredients) {
+        // Cố định thứ tự cập nhật để giảm deadlock khi nhiều đơn cùng xuất kho.
+        const sortedIngredients = [...requiredIngredients.entries()]
+            .sort(([a], [b]) => a.localeCompare(b));
+        for (const [ingredientId, requiredQuantity] of sortedIngredients) {
             const ingredient = await tx.ingredient.findUnique({
                 where: {
                     id: ingredientId,
