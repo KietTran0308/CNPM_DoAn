@@ -1,7 +1,8 @@
-import {Type} from 'class-transformer';
-import {Size} from '@prisma/client';
+import { Type } from "class-transformer";
+import { Size } from "@prisma/client";
 
-export {Size as ProductSize};
+export { Size as ProductSize };
+
 import {
     ArrayMinSize,
     ArrayUnique,
@@ -14,15 +15,27 @@ import {
     IsUUID,
     MaxLength,
     Min,
-    ValidateNested
-} from 'class-validator';
+    ValidateNested,
+} from "class-validator";
 
-import {Body, Controller, Get, Param, ParseUUIDPipe, Patch, Post, Req, UseGuards, Headers} from '@nestjs/common';
-import {JwtGuard, CurrentUser} from '../auth/jwt.guard';
-import {OrdersService} from './orders.service';
+import {
+    Body,
+    Controller,
+    Get,
+    Headers,
+    Param,
+    ParseUUIDPipe,
+    Patch,
+    Post,
+    Req,
+    UseGuards,
+} from "@nestjs/common";
+
+import { JwtGuard, CurrentUser } from "../auth/jwt.guard";
+import { OrdersService } from "./orders.service";
 
 export class OrderItemDto {
-    @IsUUID('all')
+    @IsUUID("all")
     productId!: string;
 
     @IsEnum(Size)
@@ -35,14 +48,14 @@ export class OrderItemDto {
     @IsOptional()
     @IsArray()
     @ArrayUnique()
-    @IsUUID('all', {each: true})
+    @IsUUID("all", { each: true })
     toppingIds?: string[];
 }
 
 export class CreateOrderDto {
     @IsArray()
     @ArrayMinSize(1)
-    @ValidateNested({each: true})
+    @ValidateNested({ each: true })
     @Type(() => OrderItemDto)
     items!: OrderItemDto[];
 
@@ -58,48 +71,47 @@ export class CreateOrderDto {
 }
 
 export class StatusDto {
-    @IsIn(['PREPARING', 'READY', 'COMPLETED'])
-    status!: 'PREPARING' | 'READY' | 'COMPLETED';
+    @IsIn(["PREPARING", "READY", "COMPLETED"])
+    status!: "PREPARING" | "READY" | "COMPLETED";
 }
 
-
-@Controller('orders')
+@Controller("orders")
 @UseGuards(JwtGuard)
 export class OrdersController {
-    constructor(private readonly ordersService: OrdersService) {
-    }
+    constructor(private readonly ordersService: OrdersService) {}
 
     @Post()
     create(
         @Req() req: { user: CurrentUser },
-        @Headers('idempotency-key') key: string,
+        @Headers("idempotency-key") key: string,
         @Body() dto: CreateOrderDto,
     ) {
-        return this.ordersService.create(
-            req.user.id,
-            dto,
-            key,
-        );
+        return this.ordersService.create(req.user.id, dto, key);
     }
 
-    @Get('me')
+    @Get("me")
     mine(@Req() req: { user: CurrentUser }) {
         return this.ordersService.mine(req.user.id);
     }
 
-    @Patch(':id/status')
+    @Patch(":id/status")
     changeStatus(
         @Req() req: { user: CurrentUser },
-        @Param('id', new ParseUUIDPipe()) id: string,
+        @Param("id", new ParseUUIDPipe()) id: string,
         @Body() dto: StatusDto,
     ) {
-        return this.ordersService.changeStatus(id, dto.status, req.user.role);
+        return this.ordersService.changeStatus(
+            id,
+            dto.status,
+            req.user.role,
+            req.user.id,
+        );
     }
 
-    @Post(':id/cancel')
+    @Post(":id/cancel")
     cancel(
         @Req() req: { user: CurrentUser },
-        @Param('id', new ParseUUIDPipe()) id: string,
+        @Param("id", new ParseUUIDPipe()) id: string,
     ) {
         return this.ordersService.cancel(id, req.user.id);
     }
