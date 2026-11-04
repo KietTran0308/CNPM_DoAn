@@ -1,3 +1,4 @@
+
 import 'dotenv/config';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
@@ -14,11 +15,24 @@ async function bootstrap() {
         }),
     );
 
+    const allowedOrigins = (
+        process.env.FRONTEND_URL || 'http://localhost:3000'
+    )
+        .split(',')
+        .map(origin => origin.trim());
+
     app.enableCors({
-        origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+        origin: allowedOrigins,
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+        allowedHeaders: [
+            'Content-Type',
+            'Authorization',
+            'Idempotency-Key',
+        ],
     });
 
-    await app.listen(Number(process.env.PORT) || 4000);
+    const port = Number(process.env.PORT) || 4000;
+    await app.listen(port, '0.0.0.0');
 }
 
 bootstrap();
