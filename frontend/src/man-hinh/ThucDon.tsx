@@ -78,7 +78,7 @@ export const ThucDon: React.FC<ThucDonProps> = ({
 
   const xuLyThemNhanh = (e: React.MouseEvent, item: Product) => {
     e.stopPropagation();
-    if (item.stock <= 0 || !onQuickAddProduct) return;
+    if (item.stock <= 0 || item.isActive === false || !onQuickAddProduct) return;
     onQuickAddProduct(item);
     setIdVuaThemNhanh(item.id);
     setTimeout(() => {
@@ -173,7 +173,7 @@ export const ThucDon: React.FC<ThucDonProps> = ({
               </div>
             ) : (
               danhSachMonDaLoc.map((item) => {
-                const hetHang = item.stock <= 0;
+                const hetHang = item.stock <= 0 || item.isActive === false;
                 const vuaThem = idVuaThemNhanh === item.id;
                 const loiAnh = anhLoi[item.id];
                 const duongDanAnh = layDuongDanAnh(item.imageUrl) || anhDuPhong;
@@ -231,7 +231,7 @@ export const ThucDon: React.FC<ThucDonProps> = ({
                                 : 'bg-[#EDE6D1] border-[#D5CCB4] text-[#124E35]'
                             }`}
                           >
-                            {hetHang ? 'Hết hàng' : `Còn ${item.stock}`}
+                            {item.isActive === false ? 'Ngừng bán' : hetHang ? 'Hết hàng' : `Còn ${item.stock}`}
                           </span>
                         </div>
 

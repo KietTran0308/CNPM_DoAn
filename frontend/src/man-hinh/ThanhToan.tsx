@@ -15,6 +15,10 @@ interface ThanhToanProps {
   setPromoError?: (error: string | null) => void;
   onApplyPromo?: (e: React.FormEvent) => void;
   onRemovePromo?: () => void;
+  usePoints?: boolean;
+  setUsePoints?: (val: boolean) => void;
+  pointsToRedeem?: number;
+  setPointsToRedeem?: (points: number) => void;
   stockError: string | null;
   setStockError: (err: string | null) => void;
   currentPendingOrderId?: string | null;
@@ -51,6 +55,10 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
   setPromoError,
   onApplyPromo,
   onRemovePromo,
+  usePoints = false,
+  setUsePoints,
+  pointsToRedeem = 0,
+  setPointsToRedeem,
   stockError,
   setStockError,
   currentPendingOrderId,
@@ -78,6 +86,12 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
       ? rawSubtotal
       : cartLines.reduce((sum, l) => sum + l.item.lineTotal, 0);
 
+  const userPoints = user?.loyaltyPoints ?? 0;
+  const maxUsablePoints = Math.min(userPoints, Math.floor(totalCartPrice / 1000));
+  const actualPointsUsed = usePoints ? Math.min(Math.max(0, pointsToRedeem), maxUsablePoints) : 0;
+  const pointsDiscount = actualPointsUsed * 1000;
+  const finalPayable = Math.max(0, totalCartPrice - pointsDiscount);
+
   return (
     <div className="w-full flex-1 flex flex-col space-y-5">
       <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 bg-[#FBF9F5] rounded-xl border border-[#E2D9C0]">
@@ -94,9 +108,23 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
             Thanh toán đơn hàng
           </span>
         </div>
-        <span className="text-xs sm:text-sm font-mono tabular-nums border border-[#D5CCB4] px-3 py-1.5 rounded-lg bg-[#EDE6D1] text-[#124E35] font-medium">
-          Điểm: <span className="font-semibold text-[#124E35]">{user?.loyaltyPoints ?? 0}</span>
-        </span>
+        <div className="group relative">
+          <span className="text-xs sm:text-sm font-mono tabular-nums border border-[#D5CCB4] px-3 py-1.5 rounded-lg bg-[#EDE6D1] text-[#124E35] font-medium cursor-help inline-block">
+            Điểm: <span className="font-semibold text-[#124E35]">{userPoints}</span>
+          </span>
+          <div className="absolute right-0 top-full mt-2 w-72 p-3.5 bg-[#FBF9F5] border border-[#D5CCB4] rounded-xl shadow-lg text-xs text-[#124E35] z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none">
+            <div className="font-semibold text-sm border-b border-[#E2D9C0] pb-1.5 mb-2">
+              Cơ chế Tích điểm & Quy đổi
+            </div>
+            <div className="space-y-1.5 text-[11px] leading-relaxed">
+              <div>• <span className="font-semibold">Tích điểm:</span> Mỗi 10.000đ chi tiêu = +1 điểm thưởng</div>
+              <div>• <span className="font-semibold">Quy đổi:</span> 1 điểm = 1.000đ khi thanh toán đơn hàng</div>
+              <div className="pt-1.5 mt-1 border-t border-[#E2D9C0] font-medium">
+                Điểm hiện tại: <span className="font-bold">{userPoints} điểm</span> ({formatPrice(userPoints * 1000)})
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
@@ -247,7 +275,7 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                       Quét mã bằng ứng dụng <strong className="text-[#124E35]">{walletType}</strong>
                     </p>
                     <p className="text-[11px] font-mono text-neutral-500">
-                      Nội dung: BREW-{totalCartPrice}
+                      Nội dung: BREW-{finalPayable}
                     </p>
                   </div>
                 </div>
@@ -381,28 +409,99 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
             </div>
           )}
 
+          <div className="p-4 border border-[#D5CCB4] bg-[#EDE6D1]/40 rounded-xl space-y-3">
+            <div className="flex items-center justify-between text-xs sm:text-sm font-semibold text-[#124E35]">
+              <span>Sử dụng điểm thưởng</span>
+              <span className="font-mono tabular-nums font-semibold">{userPoints} điểm</span>
+            </div>
+
+            {userPoints > 0 ? (
+              <div className="space-y-2.5">
+                <label className="flex items-center gap-2 text-xs text-[#124E35] cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={!!usePoints}
+                    onChange={(e) => {
+                      if (setUsePoints) {
+                        setUsePoints(e.target.checked);
+                        if (e.target.checked && setPointsToRedeem && pointsToRedeem === 0) {
+                          setPointsToRedeem(maxUsablePoints);
+                        }
+                      }
+                    }}
+                    className="w-4 h-4 rounded border-[#D5CCB4] text-[#124E35] focus:ring-[#124E35] cursor-pointer accent-[#124E35]"
+                  />
+                  <span>Dùng điểm thưởng giảm giá (1 điểm = 1.000đ)</span>
+                </label>
+
+                {usePoints && (
+                  <div className="pt-2 border-t border-[#D5CCB4]/60 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={0}
+                        max={maxUsablePoints}
+                        value={pointsToRedeem}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10) || 0;
+                          const clamped = Math.max(0, Math.min(val, maxUsablePoints));
+                          setPointsToRedeem?.(clamped);
+                        }}
+                        className="flex-1 px-3 py-1.5 border border-[#D5CCB4] rounded-lg bg-white text-xs font-mono text-neutral-900 focus:outline-none focus:border-[#124E35]"
+                        placeholder="Nhập số điểm"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setPointsToRedeem?.(maxUsablePoints)}
+                        className="px-3 py-1.5 text-xs font-semibold rounded-lg border border-[#D5CCB4] bg-[#EDE6D1] text-[#124E35] hover:bg-[#124E35] hover:text-[#F5F0E1] transition-colors cursor-pointer"
+                      >
+                        Dùng toàn bộ
+                      </button>
+                    </div>
+                    <div className="flex justify-between items-center text-[11px] text-[#124E35]/80">
+                      <span>Tối đa cho đơn này: {maxUsablePoints} điểm</span>
+                      <span className="font-semibold font-mono text-[#124E35]">
+                        -{formatPrice(pointsDiscount)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-xs text-[#124E35]/70 italic">
+                Bạn chưa có điểm thưởng khả dụng (Mỗi 10.000đ thanh toán nhận +1 điểm).
+              </div>
+            )}
+          </div>
+
           <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs text-neutral-600">
+              <span>Tạm tính</span>
+              <span className="font-mono tabular-nums text-neutral-800">
+                {formatPrice(tamTinh)}
+              </span>
+            </div>
+
             {appliedPromo && (
-              <>
-                <div className="flex items-center justify-between text-xs text-neutral-600">
-                  <span>Tạm tính</span>
-                  <span className="font-mono tabular-nums text-neutral-800">
-                    {formatPrice(tamTinh)}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-xs text-[#124E35] font-semibold">
-                  <span>Ưu đãi ({appliedPromo.code})</span>
-                  <span className="font-mono tabular-nums">-{formatPrice(discountAmount)}</span>
-                </div>
-              </>
+              <div className="flex items-center justify-between text-xs text-[#124E35] font-semibold">
+                <span>Ưu đãi ({appliedPromo.code})</span>
+                <span className="font-mono tabular-nums">-{formatPrice(discountAmount)}</span>
+              </div>
             )}
 
-            <div className="flex items-center justify-between pt-1">
+            {usePoints && actualPointsUsed > 0 && (
+              <div className="flex items-center justify-between text-xs text-[#124E35] font-semibold">
+                <span>Đổi điểm thưởng ({actualPointsUsed} điểm)</span>
+                <span className="font-mono tabular-nums">-{formatPrice(pointsDiscount)}</span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pt-1 border-t border-[#E2D9C0]">
               <span className="text-xs sm:text-sm text-[#124E35] font-semibold">
                 Tổng số tiền thanh toán
               </span>
               <span className="font-mono tabular-nums font-bold text-lg text-[#124E35]">
-                {formatPrice(totalCartPrice)}
+                {formatPrice(finalPayable)}
               </span>
             </div>
           </div>
@@ -453,7 +552,7 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
           >
             {checkoutLoading
               ? 'Đang xử lý giao dịch...'
-              : `Xác nhận thanh toán · ${formatPrice(totalCartPrice)}`}
+              : `Xác nhận thanh toán · ${formatPrice(finalPayable)}`}
           </button>
         </div>
       </div>

@@ -10,6 +10,7 @@ import {
   ToppingType,
   SugarType,
   IceType,
+  DEFAULT_TOPPINGS,
 } from '../api';
 
 interface ChiTietMonProps {
@@ -122,7 +123,7 @@ export const ChiTietMon: React.FC<ChiTietMonProps> = ({
                   <span />
                 )}
                 <span className="px-2.5 py-0.5 rounded bg-[#EDE6D1] border border-[#D5CCB4] text-[#124E35] text-xs font-semibold">
-                  Còn {selectedProduct.stock} ly
+                  {selectedProduct.isActive === false ? 'Ngừng bán' : selectedProduct.stock <= 0 ? 'Hết hàng' : `Còn ${selectedProduct.stock} ly`}
                 </span>
               </div>
 
@@ -198,27 +199,24 @@ export const ChiTietMon: React.FC<ChiTietMonProps> = ({
 
             <div>
               <div className="text-xs sm:text-sm font-semibold text-[#124E35] mb-2.5">
-                Chọn Topping
+                Chọn Topping ({selectedToppings.length} đã chọn)
               </div>
-              <div className="grid grid-cols-2 gap-2.5">
-                {[
-                  { name: 'Trân châu' as ToppingType, extra: '+5.000đ' },
-                  { name: 'Kem' as ToppingType, extra: '+10.000đ' },
-                ].map(({ name, extra }) => {
-                  const isChecked = selectedToppings.includes(name);
+              <div className="grid grid-cols-2 sm:grid-cols-2 gap-2">
+                {DEFAULT_TOPPINGS.map((t) => {
+                  const isChecked = selectedToppings.includes(t.name);
                   return (
                     <button
-                      key={name}
+                      key={t.code}
                       type="button"
-                      onClick={() => toggleTopping(name)}
-                      className={`py-2.5 px-3.5 text-xs sm:text-sm border rounded-lg flex items-center justify-between cursor-pointer transition-colors ${
+                      onClick={() => toggleTopping(t.name)}
+                      className={`py-2 px-3 text-xs border rounded-lg flex items-center justify-between cursor-pointer transition-colors ${
                         isChecked
                           ? 'bg-[#124E35] text-[#F5F0E1] font-semibold border-[#124E35]'
                           : 'bg-[#EDE6D1] text-[#124E35] font-medium border-[#D5CCB4] hover:bg-[#124E35] hover:text-[#F5F0E1]'
                       }`}
                     >
-                      <span>{name}</span>
-                      <span className="font-mono text-xs opacity-85">{extra}</span>
+                      <span className="truncate pr-1">{t.name}</span>
+                      <span className="font-mono text-[11px] shrink-0 opacity-85">+{formatPrice(t.price)}</span>
                     </button>
                   );
                 })}
@@ -319,12 +317,14 @@ export const ChiTietMon: React.FC<ChiTietMonProps> = ({
               <button
                 type="button"
                 onClick={onAddToCart}
-                disabled={selectedProduct.stock <= 0 || addingToCart}
+                disabled={selectedProduct.stock <= 0 || selectedProduct.isActive === false || addingToCart}
                 className="w-full py-3 bg-[#124E35] text-[#F5F0E1] font-semibold text-sm rounded-lg cursor-pointer hover:opacity-95 disabled:bg-neutral-200 disabled:text-neutral-400 transition-colors flex items-center justify-center gap-2"
               >
                 <ShoppingBag className="w-4 h-4" />
                 <span>
-                  {selectedProduct.stock <= 0
+                  {selectedProduct.isActive === false
+                    ? 'Món tạm ngừng bán'
+                    : selectedProduct.stock <= 0
                     ? 'Hết hàng'
                     : addingToCart
                     ? 'Đang thêm vào giỏ...'
