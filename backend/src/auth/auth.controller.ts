@@ -1,8 +1,7 @@
 import {Body, Controller, Get, Post, Put, Req, UseGuards} from '@nestjs/common';
 import {IsEmail, IsOptional, IsString, MaxLength, Matches, MinLength} from 'class-validator';
 import {AuthService} from './auth.service';
-import {JwtGuard, CurrentUser} from './jwt.guard';
-
+import { JwtAuthGuard, CurrentUser } from './jwt.guard';
 class RegisterDto {
     @IsString() @MinLength(2) @MaxLength(255) fullName!: string;
     @IsEmail() @MaxLength(255) email!: string;
@@ -40,15 +39,15 @@ export class AuthController {
         return this.auth.login(d.email, d.password);
     }
 
-    @UseGuards(JwtGuard) @Get('me') me(@Req() req: { user: CurrentUser }) {
+    @UseGuards(JwtAuthGuard) @Get('me') me(@Req() req: { user: CurrentUser }) {
         return this.auth.getMe(req.user.id);
     }
 
-    @UseGuards(JwtGuard) @Put('profile') profile(@Req() req: { user: CurrentUser }, @Body() d: UpdateProfileDto) {
+    @UseGuards(JwtAuthGuard) @Put('profile') profile(@Req() req: { user: CurrentUser }, @Body() d: UpdateProfileDto) {
         return this.auth.updateProfile(req.user.id, d);
     }
 
-    @UseGuards(JwtGuard) @Put('password') password(@Req() req: { user: CurrentUser }, @Body() d: ChangePasswordDto) {
+    @UseGuards(JwtAuthGuard) @Put('password') password(@Req() req: { user: CurrentUser }, @Body() d: ChangePasswordDto) {
         return this.auth.changePassword(req.user.id, d.currentPassword, d.newPassword);
     }
 }

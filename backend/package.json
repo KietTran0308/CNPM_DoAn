@@ -11,7 +11,8 @@
     "db:seed": "prisma db seed",
     "test": "jest --runInBand",
     "test:integration": "jest --runInBand --testPathPattern=integration",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "start:dev": "nest start --watch"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",
