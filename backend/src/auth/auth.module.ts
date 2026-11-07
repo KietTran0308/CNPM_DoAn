@@ -1,6 +1,6 @@
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
-import { JwtGuard } from './jwt.guard';
+import { JwtAuthGuard } from './jwt.guard';
 import {JwtModule} from "@nestjs/jwt";
 import {PrismaModule} from "../prisma.module";
 import {Module} from "@nestjs/common";
@@ -18,7 +18,7 @@ if (!process.env.JWT_SECRET) {
         }),
     ],
     controllers: [AuthController],
-    providers: [AuthService, JwtGuard],
-    exports: [JwtGuard, JwtModule],
+    providers: [AuthService, PrismaService, JwtAuthGuard],
+    exports: [AuthService, JwtAuthGuard, JwtModule],
 })
 export class AuthModule {}

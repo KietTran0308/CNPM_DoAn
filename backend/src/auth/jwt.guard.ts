@@ -1,72 +1,47 @@
+
 import {
-    CanActivate,
-    ExecutionContext,
-    Injectable,
-    UnauthorizedException,
+  Injectable,
+  CanActivate,
+  ExecutionContext,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaService } from '../prisma.service';
 
-export type CurrentUser = {
-    id: string;
-    email: string;
-    role: string;
-};
+export interface CurrentUser {
+  id: string;
+  email: string;
+  role: string;
+}
 
 @Injectable()
-export class JwtGuard implements CanActivate {
-    constructor(
-        private readonly jwt: JwtService,
-        private readonly prisma: PrismaService,
-    ) {}
+export class JwtAuthGuard implements CanActivate {
+  constructor(private readonly jwtService: JwtService) {}
 
-    async canActivate(context: ExecutionContext): Promise<boolean> {
-        const request = context.switchToHttp().getRequest<{
-            headers: { authorization?: string };
-            user?: CurrentUser;
-        }>();
+  canActivate(context: ExecutionContext): boolean {
+    const request = context.switchToHttp().getRequest();
 
-        const authorization = request.headers.authorization || '';
+    const authHeader = request.headers.authorization;
 
-        if (!authorization.startsWith('Bearer ')) {
-            throw new UnauthorizedException('Thiếu token đăng nhập');
-        }
-
-        const token = authorization.slice(7).trim();
-
-        if (!token) {
-            throw new UnauthorizedException('Token không hợp lệ');
-        }
-
-        let payload: { sub: string };
-
-        try {
-            payload = await this.jwt.verifyAsync<{ sub: string }>(token);
-        } catch {
-            throw new UnauthorizedException(
-                'Token không hợp lệ hoặc đã hết hạn',
-            );
-        }
-
-        if (!payload?.sub) {
-            throw new UnauthorizedException('Token thiếu thông tin tài khoản');
-        }
-
-        const user = await this.prisma.user.findUnique({
-            where: { id: payload.sub },
-            select: {
-                id: true,
-                email: true,
-                role: true,
-            },
-        });
-
-        if (!user) {
-            throw new UnauthorizedException('Tài khoản không tồn tại');
-        }
-
-        request.user = user;
-
-        return true;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      throw new UnauthorizedException('Không tìm thấy Token bảo vệ!');
     }
+
+    const token = authHeader.split(' ')[1];
+
+    try {
+      const decoded = this.jwtService.verify(token);
+
+      request.user = {
+        id: decoded.sub,
+        email: decoded.email,
+        role: decoded.role,
+      };
+
+      return true;
+    } catch {
+      throw new UnauthorizedException(
+        'Token không hợp lệ hoặc đã hết hạn!',
+      );
+    }
+  }
 }
