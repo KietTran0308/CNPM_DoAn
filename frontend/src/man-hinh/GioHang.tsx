@@ -8,6 +8,7 @@ import {
   ToppingType,
   SugarType,
   IceType,
+  DEFAULT_TOPPINGS,
 } from '../api';
 
 export interface ModalSuaMonProps {
@@ -106,24 +107,25 @@ export const ModalSuaMon: React.FC<ModalSuaMonProps> = ({
         </div>
 
         <div>
-          <div className="text-xs font-semibold text-[#124E35] mb-2">Topping thêm</div>
+          <div className="text-xs font-semibold text-[#124E35] mb-2">
+            Topping thêm ({editToppings.length} đã chọn)
+          </div>
           <div className="grid grid-cols-2 gap-2">
-            {(['Trân châu', 'Kem'] as ToppingType[]).map((name) => {
-              const extra = name === 'Trân châu' ? '+5.000đ' : '+10.000đ';
-              const isChecked = editToppings.includes(name);
+            {DEFAULT_TOPPINGS.map((t) => {
+              const isChecked = editToppings.includes(t.name);
               return (
                 <button
-                  key={name}
+                  key={t.code}
                   type="button"
-                  onClick={() => onToggleEditTopping(name)}
+                  onClick={() => onToggleEditTopping(t.name)}
                   className={`py-2 px-3 text-xs border rounded-lg flex items-center justify-between cursor-pointer transition-colors ${
                     isChecked
                       ? 'bg-[#124E35] text-[#F5F0E1] font-semibold border-[#124E35]'
                       : 'bg-[#EDE6D1] text-[#124E35] font-medium border-[#D5CCB4] hover:bg-[#124E35] hover:text-[#F5F0E1]'
                   }`}
                 >
-                  <span>{name}</span>
-                  <span className="font-mono text-[11px] opacity-85">{extra}</span>
+                  <span className="truncate pr-1">{t.name}</span>
+                  <span className="font-mono text-[11px] shrink-0 opacity-85">+{formatPrice(t.price)}</span>
                 </button>
               );
             })}

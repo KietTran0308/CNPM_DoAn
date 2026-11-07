@@ -27,6 +27,8 @@ import {
   BACKGROUND,
   layDuongDanAnh,
   QUERY_KEYS,
+  formatPrice,
+  tinhGiaTopping,
 } from '../api';
 
 import { useGioHang } from '../store/useGioHang';
@@ -55,6 +57,7 @@ const ThanhDieuHuong: React.FC<ThanhDieuHuongProps> = ({
 }) => {
   const [loiLogo, setLoiLogo] = useState(false);
   const duongDanLogo = layDuongDanAnh(LOGO.chinh);
+  const userPoints = user?.loyaltyPoints ?? 0;
 
   return (
     <header className="flex justify-between items-center px-4 sm:px-6 py-3 bg-[#FBF9F5] rounded-xl border border-[#E2D9C0] shadow-xs relative">
@@ -78,8 +81,22 @@ const ThanhDieuHuong: React.FC<ThanhDieuHuongProps> = ({
       </div>
 
       <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
-        <div className="text-xs sm:text-sm text-[#124E35] font-mono tabular-nums px-3 py-1.5 rounded-lg bg-[#EDE6D1] border border-[#D5CCB4] font-medium">
-          Điểm: <span className="font-semibold text-[#124E35]">{user?.loyaltyPoints ?? 0}</span>
+        <div className="group relative">
+          <div className="text-xs sm:text-sm text-[#124E35] font-mono tabular-nums px-3 py-1.5 rounded-lg bg-[#EDE6D1] border border-[#D5CCB4] font-medium cursor-help select-none">
+            Điểm: <span className="font-semibold text-[#124E35]">{userPoints}</span>
+          </div>
+          <div className="absolute right-0 top-full mt-2 w-72 p-3.5 bg-[#FBF9F5] border border-[#D5CCB4] rounded-xl shadow-lg text-xs text-[#124E35] z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none">
+            <div className="font-semibold text-sm border-b border-[#E2D9C0] pb-1.5 mb-2">
+              Cơ chế Tích điểm & Quy đổi
+            </div>
+            <div className="space-y-1.5 text-[11px] leading-relaxed">
+              <div>• <span className="font-semibold">Tích điểm:</span> Mỗi 10.000đ chi tiêu = +1 điểm thưởng</div>
+              <div>• <span className="font-semibold">Quy đổi:</span> 1 điểm = 1.000đ khi thanh toán đơn hàng</div>
+              <div className="pt-1.5 mt-1 border-t border-[#E2D9C0] font-medium">
+                Điểm hiện tại: <span className="font-bold">{userPoints} điểm</span> ({formatPrice(userPoints * 1000)})
+              </div>
+            </div>
+          </div>
         </div>
         <button
           type="button"
@@ -171,6 +188,15 @@ function UngDungDatNuoc() {
   const rawSubtotal = useGioHang((s) => s.getRawSubtotal());
   const discountAmount = useGioHang((s) => s.getDiscountAmount());
   const totalCartPrice = useGioHang((s) => s.getTotalCartPrice());
+
+  const [usePoints, setUsePoints] = useState(false);
+  const [pointsToRedeem, setPointsToRedeem] = useState(0);
+
+  const userLoyaltyPoints = user?.loyaltyPoints ?? 0;
+  const maxUsablePoints = Math.min(userLoyaltyPoints, Math.floor(totalCartPrice / 1000));
+  const actualPointsToUse = usePoints ? Math.min(Math.max(0, pointsToRedeem), maxUsablePoints) : 0;
+  const pointsDiscount = actualPointsToUse * 1000;
+  const finalPayablePrice = Math.max(0, totalCartPrice - pointsDiscount);
 
   const [paymentMethod, setPaymentMethod] = useState<'wallet' | 'bank'>('wallet');
   const [walletType, setWalletType] = useState<'MoMo' | 'VNPay'>('MoMo');
@@ -354,14 +380,6 @@ function UngDungDatNuoc() {
     return 0;
   };
 
-  const tinhGiaTopping = (toppings: ToppingType[]): number => {
-    return toppings.reduce((sum, t) => {
-      if (t === 'Trân châu') return sum + 5000;
-      if (t === 'Kem') return sum + 10000;
-      return sum;
-    }, 0);
-  };
-
   const donGiaHienTai =
     selectedProduct.price + tinhGiaSize(selectedSize) + tinhGiaTopping(selectedToppings);
 
@@ -378,6 +396,7 @@ function UngDungDatNuoc() {
   };
 
   const xuLyThemNhanhVaoGio = (product: Product) => {
+    if (product.isActive === false || product.stock <= 0) return;
     const soLuongHienCo = laySoLuongMonTrongGio(product.id);
     if (soLuongHienCo + 1 > product.stock) return;
 
@@ -405,6 +424,11 @@ function UngDungDatNuoc() {
 
   const xuLyThemVaoGio = () => {
     setStockNotice(null);
+
+    if (selectedProduct.isActive === false) {
+      setStockNotice('Món nước này hiện đang tạm ngừng kinh doanh.');
+      return;
+    }
 
     const qtyToAdd = Math.max(1, selectedQty);
     const currentQtyInCart = laySoLuongMonTrongGio(selectedProduct.id);
@@ -585,7 +609,7 @@ function UngDungDatNuoc() {
       const createdAtFormatted = dinhDangThoiGian();
 
       if (!orderId) {
-        const orderRes = await api.createOrder(orderItems, totalCartPrice);
+        const orderRes = await api.createOrder(orderItems, finalPayablePrice);
         orderId = orderRes.orderId;
         setCurrentPendingOrderId(orderId);
 
@@ -593,7 +617,7 @@ function UngDungDatNuoc() {
           id: orderId,
           userId: user?.id || 'usr_me',
           status: 'PENDING',
-          total: totalCartPrice,
+          total: finalPayablePrice,
           createdAt: createdAtFormatted,
           items: orderItems,
         };
@@ -602,7 +626,7 @@ function UngDungDatNuoc() {
         await api.transitionOrderStatus(orderId, 'PENDING').catch(() => {});
         capNhatLichSuDon((prev) =>
           prev.map((o) =>
-            o.id === orderId ? { ...o, status: 'PENDING', total: totalCartPrice, items: orderItems } : o
+            o.id === orderId ? { ...o, status: 'PENDING', total: finalPayablePrice, items: orderItems } : o
           )
         );
       }
@@ -623,9 +647,11 @@ function UngDungDatNuoc() {
         id: 'pay_' + Date.now().toString(36),
         orderId,
         idempotencyKey,
-        amount: totalCartPrice,
+        amount: finalPayablePrice,
         method: methodString,
         simulateFailure: gayLoi,
+        pointsUsed: actualPointsToUse,
+        pointsDiscount,
       };
 
       const targetStatus: OrderStatus = gayLoi ? 'PAYMENT_FAILED' : 'PAID';
@@ -636,7 +662,7 @@ function UngDungDatNuoc() {
           id: orderId,
           userId: user?.id || 'usr_me',
           status: 'PAID',
-          total: totalCartPrice,
+          total: finalPayablePrice,
           createdAt: createdAtFormatted,
           items: orderItems,
         };
@@ -659,11 +685,11 @@ function UngDungDatNuoc() {
             })
           );
 
-          const earnedPoints = Math.floor(totalCartPrice / 10000);
-          if (user && earnedPoints > 0) {
+          const earnedPoints = Math.floor(finalPayablePrice / 10000);
+          if (user) {
             const updatedUser: User = {
               ...user,
-              loyaltyPoints: user.loyaltyPoints + earnedPoints,
+              loyaltyPoints: Math.max(0, user.loyaltyPoints - actualPointsToUse) + earnedPoints,
             };
             setUser(updatedUser);
             setStoredUser(updatedUser);
@@ -672,6 +698,8 @@ function UngDungDatNuoc() {
 
         setLastOrder(paidOrder);
         clearCart();
+        setUsePoints(false);
+        setPointsToRedeem(0);
         setCurrentPendingOrderId(null);
         setCheckoutStatus(null);
         setSimulatePaymentError(false);
@@ -993,6 +1021,10 @@ function UngDungDatNuoc() {
             setPromoError={setPromoError}
             onApplyPromo={xuLyApMaGiamGia}
             onRemovePromo={removePromo}
+            usePoints={usePoints}
+            setUsePoints={setUsePoints}
+            pointsToRedeem={pointsToRedeem}
+            setPointsToRedeem={setPointsToRedeem}
             stockError={stockError}
             setStockError={setStockError}
             currentPendingOrderId={currentPendingOrderId}
