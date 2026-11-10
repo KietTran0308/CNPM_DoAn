@@ -13,6 +13,11 @@ export class ProductsController {
         return this.productsService.findAll();
     }
 
+    @Get('toppings')
+    findToppings() {
+        return this.productsService.findToppings();
+    }
+
     // GET /products/:id/options
     @Get(':id/options')
     getOptions(@Param('id', new ParseUUIDPipe()) id: string) {

@@ -32,6 +32,14 @@ export class ProductsService {
         });
     }
 
+    async findToppings() {
+        return this.prisma.topping.findMany({
+            where: {isActive: true},
+            select: {id: true, code: true, name: true, price: true, isActive: true},
+            orderBy: {name: 'asc'},
+        });
+    }
+
     async getOptions(id: string) {
         await this.findById(id);
 

@@ -6,6 +6,8 @@ interface DangNhapProps {
   setAuthMode: (mode: 'login' | 'register') => void;
   authEmail: string;
   setAuthEmail: (email: string) => void;
+  authFullName: string;
+  setAuthFullName: (name: string) => void;
   authPassword: string;
   setAuthPassword: (password: string) => void;
   authError: string | null;
@@ -19,6 +21,8 @@ export const DangNhap: React.FC<DangNhapProps> = ({
   setAuthMode,
   authEmail,
   setAuthEmail,
+  authFullName,
+  setAuthFullName,
   authPassword,
   setAuthPassword,
   authError,
@@ -67,6 +71,12 @@ export const DangNhap: React.FC<DangNhapProps> = ({
           )}
 
           <form onSubmit={onAuthSubmit} className="space-y-3.5">
+            {authMode === 'register' && <div>
+              <label className="block text-xs font-semibold text-[#124E35] mb-1.5">Họ và tên</label>
+              <input value={authFullName} onChange={e => setAuthFullName(e.target.value)}
+                minLength={2} required placeholder="Họ và tên của bạn"
+                className="w-full px-3 py-2.5 border border-[#D5CCB4] rounded-lg bg-white text-xs text-neutral-900" />
+            </div>}
             <div>
               <label className="block text-xs font-semibold text-[#124E35] mb-1.5">Email</label>
               <input

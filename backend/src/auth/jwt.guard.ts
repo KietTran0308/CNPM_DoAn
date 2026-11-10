@@ -15,6 +15,7 @@ export interface CurrentUser {
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
+
   constructor(private readonly jwtService: JwtService) {}
 
   canActivate(context: ExecutionContext): boolean {

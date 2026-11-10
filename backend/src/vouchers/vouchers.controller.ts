@@ -1,7 +1,7 @@
 import { Controller, Get } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { Req, UseGuards } from '@nestjs/common';
-import { JwtGuard, CurrentUser } from '../auth/jwt.guard';
+import { JwtAuthGuard, CurrentUser } from '../auth/jwt.guard';
 
 @Controller('vouchers')
 export class VouchersController {
@@ -28,7 +28,7 @@ export class VouchersController {
 
 
     @Get('mine')
-    @UseGuards(JwtGuard)
+    @UseGuards(JwtAuthGuard)
     async mine(@Req() req: { user: CurrentUser }) {
         const rows = await this.prisma.userVoucher.findMany({
             where: { userId: req.user.id },
@@ -39,7 +39,13 @@ export class VouchersController {
         const now = new Date();
 
         return rows.map(v => ({
+            id: v.coupon.id,
             code: v.coupon.code,
+            discountType: v.coupon.discountType,
+            maxUses: v.coupon.maxUses,
+            usedCount: v.coupon.usedCount,
+            isActive: v.coupon.isActive,
+            validFrom: v.coupon.validFrom,
             discountValue: Number(v.coupon.discountValue),
             minOrderValue: Number(v.coupon.minOrderValue),
             validTo: v.coupon.validTo,

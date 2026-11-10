@@ -26,7 +26,7 @@ describe('PaymentsService - idempotency', () => {
             $transaction: transaction,
         } as unknown as PrismaService;
 
-        const result = await new PaymentsService(prisma).pay(USER_ID, 'payment-key-123', DTO);
+        const result = await new PaymentsService(prisma, {} as any).pay(USER_ID, 'payment-key-123', DTO);
 
         expect(result.replay).toBe(true);
         expect(result.payment).toEqual(savedPayment);
@@ -46,7 +46,7 @@ describe('PaymentsService - idempotency', () => {
         } as unknown as PrismaService;
 
         await expect(
-            new PaymentsService(prisma).pay(USER_ID, 'payment-key-123', DTO),
+            new PaymentsService(prisma, {} as any).pay(USER_ID, 'payment-key-123', DTO),
         ).rejects.toThrow(ConflictException);
     });
 
@@ -63,7 +63,7 @@ describe('PaymentsService - idempotency', () => {
         } as unknown as PrismaService;
 
         await expect(
-            new PaymentsService(prisma).pay(USER_ID, 'payment-key-123', DTO),
+            new PaymentsService(prisma, {} as any).pay(USER_ID, 'payment-key-123', DTO),
         ).rejects.toThrow(ConflictException);
     });
 
@@ -79,7 +79,7 @@ describe('PaymentsService - idempotency', () => {
             payment: { findUnique: jest.fn().mockResolvedValue(savedPayment) },
         } as unknown as PrismaService;
 
-        const result = await new PaymentsService(prisma).pay(
+        const result = await new PaymentsService(prisma, {} as any).pay(
             USER_ID,
             'payment-key-456',
             { ...DTO, simulateFailure: true },
@@ -89,7 +89,7 @@ describe('PaymentsService - idempotency', () => {
     });
 
     it('tu choi idempotency key ngan hon 8 ky tu', async () => {
-        const service = new PaymentsService({} as PrismaService);
+        const service = new PaymentsService({} as PrismaService, {} as any);
         await expect(service.pay(USER_ID, 'short', DTO)).rejects.toThrow(
             BadRequestException,
         );

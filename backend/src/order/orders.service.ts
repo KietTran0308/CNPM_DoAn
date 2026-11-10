@@ -15,8 +15,6 @@ import { PrismaService } from "../prisma.service";
 import type { CreateOrderDto, OrderItemDto } from "./orders.controller";
 import { assertTransition } from "./order-state";
 
-// Chấp nhận cả payload cũ toppingIds[] (1 suất) và payload mới toppings[].
-// Không nhận đồng thời cả hai cách để tránh tính giá không rõ ràng.
 export function normalizeToppingSelections(item: OrderItemDto): Array<{
     toppingId: string;
     servings: number;
@@ -218,6 +216,9 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                 productId: item.productId,
                 size: item.size,
                 qty: item.qty,
+                sugar: item.sugar ?? "100%",
+                ice: item.ice ?? "100%",
+                note: item.note?.trim() ?? "",
                 toppings: [...normalizeToppingSelections(item)]
                     .sort((a, b) => a.toppingId.localeCompare(b.toppingId)),
             }))
@@ -268,6 +269,9 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                             productId: result.product.id,
                             size: item.size,
                             qty: item.qty,
+                            sugar: item.sugar ?? "100%",
+                            ice: item.ice ?? "100%",
+                            note: item.note?.trim() || null,
                             basePrice: result.basePrice,
                             unitPrice: result.unitPrice,
                             lineTotal: result.lineTotal,
@@ -549,14 +553,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                     }
 
                     assertTransition(order.status, newStatus);
-
-                    // Chỉ xuất kho khi đơn bắt đầu pha chế.
-                    if (
-                        order.status === OrderStatus.PAID &&
-                        newStatus === OrderStatus.PREPARING
-                    ) {
-                        await this.consumeIngredients(tx, orderId, performedBy);
-                    }
+                    // Tồn kho đã trừ ở bước thanh toán PAID.
 
                     const updated = await tx.order.updateMany({
                         where: {
@@ -571,28 +568,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                     if (updated.count !== 1) {
                         throw new ConflictException("Trạng thái đơn đã bị thay đổi");
                     }
-
-                    // Chỉ thưởng điểm khi đơn đã phục vụ xong.
-                    // Đơn PAID có thể hủy, nên không cộng điểm trước COMPLETED.
-                    if (newStatus === OrderStatus.COMPLETED) {
-                        const earnedPoints = Math.floor(Number(order.total) / 10000);
-                        if (earnedPoints > 0) {
-                            await tx.user.update({
-                                where: { id: order.userId },
-                                data: {
-                                    loyaltyPoints: { increment: earnedPoints },
-                                },
-                            });
-                            await tx.loyaltyTransaction.create({
-                                data: {
-                                    userId: order.userId,
-                                    orderId,
-                                    points: earnedPoints,
-                                    type: "EARN",
-                                },
-                            });
-                        }
-                    }
+                    // Điểm đã cộng ở bước thanh toán, không cộng lần hai.
 
                     await tx.orderStatusHistory.create({
                         data: {
@@ -705,6 +681,41 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                             },
                         });
 
+                        // Hoàn nguyên liệu đã trừ khi PAID, trước lúc pha chế.
+                        const consumed = await tx.ingredientMovement.findMany({
+                            where: { orderId, movementType: "CONSUMPTION" },
+                            orderBy: { ingredientId: "asc" },
+                        });
+                        for (const move of consumed) {
+                            const ingredient = await tx.ingredient.findUniqueOrThrow({where: {id: move.ingredientId}});
+                            const quantity = move.quantityChange.negated();
+                            const changed = await tx.ingredient.updateMany({
+                                where: {id: ingredient.id, version: ingredient.version},
+                                data: {stockQty: {increment: quantity}, version: {increment: 1}, updatedAt: new Date()},
+                            });
+                            if (changed.count !== 1) throw new ConflictException("Tồn kho vừa thay đổi, hãy thử lại");
+                            await tx.ingredientMovement.create({data: {
+                                    ingredientId: ingredient.id, orderId, movementType: "ADJUST",
+                                    expectedVersion: ingredient.version, quantityChange: quantity,
+                                    stockBefore: ingredient.stockQty, stockAfter: ingredient.stockQty.add(quantity),
+                                    note: "Hoàn nguyên liệu khi hủy đơn đã thanh toán",
+                                }});
+                        }
+
+                        // Hoàn tác điểm EARN được cộng khi thanh toán.
+                        const earned = await tx.loyaltyTransaction.findFirst({where: {orderId, type: 'EARN'}});
+                        if (earned) {
+                            const updatedPoints = await tx.user.updateMany({
+                                where: {id: userId, loyaltyPoints: {gte: earned.points}},
+                                data: {loyaltyPoints: {decrement: earned.points}},
+                            });
+                            if (updatedPoints.count !== 1) throw new ConflictException('Không đủ điểm để hoàn tác điểm đã thưởng');
+                            await tx.loyaltyTransaction.create({data: {
+                                    userId, orderId, points: earned.points,
+                                    type: 'REVERSAL', reversesTransactionId: earned.id,
+                                }});
+                        }
+
                         // --------------------------------------------
                         // RESTORE COUPON
                         // --------------------------------------------
@@ -748,8 +759,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                         // REVERSE LOYALTY POINTS
                         // --------------------------------------------
 
-                        // Với chính sách thưởng điểm khi COMPLETED,
-                        // đơn PAID được hủy chỉ cần hoàn điểm đã REDEEM.
+                        // Hoàn lại điểm REDEEM khi hủy đơn đã thanh toán.
                         if (order.pointsUsed > 0) {
                             const redeemed = await tx.loyaltyTransaction.findFirst({
                                 where: { orderId, type: "REDEEM" },
@@ -772,6 +782,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                                     orderId,
                                     points: redeemed.points,
                                     type: "REVERSAL",
+                                    reversesTransactionId: redeemed.id,
                                 },
                             });
                         }
@@ -810,7 +821,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
     // CONSUME INGREDIENTS
     // ====================================================
 
-    private async consumeIngredients(
+    async consumeIngredients(
         tx: Prisma.TransactionClient,
         orderId: string,
         performedBy?: string,

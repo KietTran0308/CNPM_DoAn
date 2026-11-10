@@ -211,7 +211,7 @@ export const LichSuDon: React.FC<LichSuDonProps> = ({
                   <div className="flex justify-between items-start gap-2">
                     <div>
                       <span className="font-mono font-semibold text-sm sm:text-base text-[#124E35] block">
-                        Đơn #{order.id}
+                        Đơn #{order.orderCode ?? order.id}
                       </span>
                       <div className="text-xs text-neutral-500 font-mono mt-0.5">
                         {order.createdAt}
@@ -229,34 +229,10 @@ export const LichSuDon: React.FC<LichSuDonProps> = ({
                     </span>
                   </div>
 
-                  <TienTrinhDon
-                    status={status}
-                    onNextStep={
-                      status === 'PAID' || status === 'PREPARING'
-                        ? () =>
-                            onTransition(
-                              order.id,
-                              status === 'PAID' ? 'PREPARING' : 'READY'
-                            )
-                        : undefined
-                    }
-                  />
-
-                  {status === 'READY' && (
-                    <div className="px-3.5 py-3 bg-[#EDE6D1] border border-[#D5CCB4] text-[#124E35] rounded-lg text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <span className="leading-relaxed font-medium">
-                        Đồ uống của bạn đã pha xong. Mời bạn đến quầy đọc mã đơn{' '}
-                        <strong className="font-mono">#{order.id}</strong> để nhận nước.
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => onTransition(order.id, 'COMPLETED')}
-                        className="px-3.5 py-2 bg-[#124E35] text-[#F5F0E1] font-semibold text-xs rounded-lg cursor-pointer hover:opacity-95 transition-colors shrink-0"
-                      >
-                        Đã nhận nước
-                      </button>
-                    </div>
-                  )}
+                  <TienTrinhDon status={status} />
+                  {status === 'READY' && <div className="px-3 py-3 bg-[#EDE6D1] rounded-lg text-xs">
+                    Đồ uống đã pha xong. Vui lòng tới quầy nhận đơn #{order.orderCode ?? order.id}.
+                  </div>}
 
                   {order.items && order.items.length > 0 && (
                     <div className="py-2.5 border-y border-[#E2D9C0] space-y-2">

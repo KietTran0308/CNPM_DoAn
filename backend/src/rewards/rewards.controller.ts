@@ -2,7 +2,7 @@ import {
     Controller, Get, Post, Body, Req, UseGuards,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { JwtGuard, CurrentUser } from '../auth/jwt.guard';
+import { JwtAuthGuard, CurrentUser } from '../auth/jwt.guard';
 import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { IsIn, IsUUID } from 'class-validator';
@@ -115,8 +115,11 @@ export class RewardsService {
     }
 }
 
+
+
+
 @Controller('rewards')
-@UseGuards(JwtGuard)
+@UseGuards(JwtAuthGuard)
 export class RewardsController {
     constructor(private readonly prisma: PrismaService,
                 private readonly rewardsService: RewardsService,) {}

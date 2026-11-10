@@ -18,7 +18,7 @@ if (!process.env.JWT_SECRET) {
         }),
     ],
     controllers: [AuthController],
-    providers: [AuthService, PrismaService, JwtAuthGuard],
+    providers: [AuthService, JwtAuthGuard],
     exports: [AuthService, JwtAuthGuard, JwtModule],
 })
 export class AuthModule {}

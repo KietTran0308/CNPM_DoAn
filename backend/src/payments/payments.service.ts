@@ -8,6 +8,7 @@ import {
 import { OrderStatus, PaymentStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma.service';
 import { assertTransition } from '../order/order-state';
+import { OrdersService } from "../order/orders.service";
 import type { PaymentDto } from './payments.controller';
 
 // Kiểu dữ liệu trả về khi lấy Payment kèm Order.
@@ -17,7 +18,7 @@ type PaymentWithOrder = Prisma.PaymentGetPayload<{
 
 @Injectable()
 export class PaymentsService {
-    constructor(private readonly prisma: PrismaService) {}
+    constructor(private readonly prisma: PrismaService, private readonly ordersService: OrdersService) {}
 
     // Cùng Idempotency-Key chỉ được dùng cho cùng một yêu cầu thanh toán.
     private getReplay(
@@ -101,6 +102,11 @@ export class PaymentsService {
                     currentStatus === OrderStatus.READY ||
                     currentStatus === OrderStatus.COMPLETED) {
                     throw new ConflictException('Đơn đã thanh toán, không thể thanh toán lần hai');
+                }
+
+                // Phương án 2: trừ kho khi thanh toán, cùng transaction với PAID.
+                if (targetStatus === OrderStatus.PAID) {
+                    await this.ordersService.consumeIngredients(tx, order.id);
                 }
 
                 assertTransition(currentStatus, targetStatus);
@@ -211,13 +217,18 @@ export class PaymentsService {
                     },
                 });
 
-                // EARN chỉ ghi khi đơn chuyển READY -> COMPLETED
-                // trong OrdersService.changeStatus().
+                // Thưởng điểm ngay khi thanh toán thành công (Task 10).
+                const earnedPoints = targetStatus === OrderStatus.PAID
+                    ? Math.floor(Number(order.total) / 10000) : 0;
+                if (earnedPoints > 0) {
+                    await tx.user.update({where: {id: userId}, data: {loyaltyPoints: {increment: earnedPoints}}});
+                    await tx.loyaltyTransaction.create({data: {userId, orderId: order.id, points: earnedPoints, type: 'EARN'}});
+                }
 
                 const savedOrder = await tx.order.findUniqueOrThrow({
                     where: { id: order.id },
                 });
-                return { replay: false, order: savedOrder, payment, earnedPoints: 0 };
+                return { replay: false, order: savedOrder, payment, earnedPoints };
             }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
         } catch (error: any) {
             // Nếu request khác đã commit cùng key, trả kết quả cũ.

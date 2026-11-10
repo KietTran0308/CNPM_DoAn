@@ -1,18 +1,9 @@
-import {
-    Body,
-    Controller,
-    Headers,
-    Post,
-    Req,
-    UseGuards,
-} from "@nestjs/common";
-
+import {Body, Controller, Headers, Post, Req, UseGuards,} from "@nestjs/common";
 import { IsBoolean, IsIn, IsOptional, IsUUID } from "class-validator";
-
-import { CurrentUser, JwtGuard } from "../auth/jwt.guard";
+import { CurrentUser, JwtAuthGuard } from "../auth/jwt.guard";
 import { PaymentsService } from "./payments.service";
 
-// Quy định dữ liệu mà client gửi khi thanh toán.
+// DTO
 export class PaymentDto {
     @IsUUID('all')
     orderId!: string;
@@ -25,8 +16,10 @@ export class PaymentDto {
     simulateFailure?: boolean;
 }
 
+
+// CONTROLER
 @Controller("payments")
-@UseGuards(JwtGuard)
+@UseGuards(JwtAuthGuard)
 export class PaymentsController {
     constructor(private readonly paymentsService: PaymentsService) {}
 

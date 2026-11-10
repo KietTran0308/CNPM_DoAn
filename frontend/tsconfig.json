@@ -21,9 +21,7 @@
     "jsx": "react-jsx",
     "strict": false,
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./src/*"]
     },
     "noEmit": true,
     "plugins": [

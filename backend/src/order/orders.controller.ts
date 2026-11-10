@@ -33,7 +33,7 @@ import {
     UseGuards,
 } from "@nestjs/common";
 
-import { JwtGuard, CurrentUser } from "../auth/jwt.guard";
+import { JwtAuthGuard, CurrentUser } from "../auth/jwt.guard";
 import { OrdersService } from "./orders.service";
 
 // Chọn nhiều suất cùng topping; giữ toppingIds để tương thích frontend cũ.
@@ -54,9 +54,7 @@ export class OrderItemDto {
     @IsEnum(Size)
     size!: Size;
 
-    @IsInt()
-    @Min(1)
-    @Max(2147483647)
+    @IsInt() @Min(1) @Max(2147483647)
     qty!: number;
 
     @ValidateIf((_obj, value) => value !== undefined)
@@ -71,6 +69,19 @@ export class OrderItemDto {
     @ValidateNested({ each: true })
     @Type(() => OrderToppingDto)
     toppings?: OrderToppingDto[];
+
+    @IsOptional()
+    @IsIn(["100%", "70%", "50%", "30%", "Ít đường"])
+    sugar?: string;
+
+    @IsOptional()
+    @IsIn(["100%", "70%", "50%", "Ít đá", "Đá riêng"])
+    ice?: string;
+
+    @IsOptional()
+    @IsString()
+    @MaxLength(250)
+    note?: string;
 }
 
 export class CreateOrderDto {
@@ -98,7 +109,7 @@ export class StatusDto {
 }
 
 @Controller("orders")
-@UseGuards(JwtGuard)
+@UseGuards(JwtAuthGuard)
 export class OrdersController {
     constructor(private readonly ordersService: OrdersService) {}
 

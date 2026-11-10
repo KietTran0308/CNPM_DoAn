@@ -3,6 +3,7 @@ import {IsEmail, IsOptional, IsString, MaxLength, Matches, MinLength} from 'clas
 import {AuthService} from './auth.service';
 import { JwtAuthGuard, CurrentUser } from './jwt.guard';
 
+// CLASS DTO
 class RegisterDto {
     @IsString() @MinLength(2) @MaxLength(255) fullName!: string;
     @IsEmail() @MaxLength(255) email!: string;
