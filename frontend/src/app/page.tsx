@@ -884,31 +884,12 @@ function UngDungDatNuoc() {
             }
             queryClient.invalidateQueries({ queryKey: QUERY_KEYS.lichSuDon });
 
-            if (targetStatus === 'READY') {
-                setStatusNotice({
-                    type: 'ready',
-                    message: `Đồ uống của bạn đã pha xong. Mời bạn đến quầy đọc mã đơn #${orderId} để nhận nước.`,
-                    orderId,
-                });
-            } else if (targetStatus === 'PREPARING') {
-                setStatusNotice({
-                    type: 'success',
-                    message: `Đơn hàng #${orderId} đã được quầy tiếp nhận và đang tiến hành pha chế.`,
-                    orderId,
-                });
-            } else if (targetStatus === 'COMPLETED') {
-                setStatusNotice({
-                    type: 'success',
-                    message: `Đơn hàng #${orderId} đã được bàn giao hoàn tất.`,
-                    orderId,
-                });
-            } else if (targetStatus === 'CANCELLED') {
-                setStatusNotice({
-                    type: 'success',
-                    message: `Đơn hàng #${orderId} đã được hủy thành công.`,
-                    orderId,
-                });
-            }
+            // Nhánh này chỉ xử lý hủy đơn; các trạng thái pha chế do STAFF cập nhật ở backend.
+            setStatusNotice({
+                type: 'success',
+                message: `Đơn hàng #${orderId} đã được hủy thành công.`,
+                orderId,
+            });
         }
     };
 
