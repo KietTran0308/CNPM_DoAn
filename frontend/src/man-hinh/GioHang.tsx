@@ -18,6 +18,7 @@ export interface ModalSuaMonProps {
     editProductName: string;
     editBasePrice: number;
     editSize: SizeType;
+    availableSizes: SizeType[];
     setEditSize: (size: SizeType) => void;
     editToppings: ToppingType[];
     onToggleEditTopping: (topping: ToppingType) => void;
@@ -42,6 +43,7 @@ export const ModalSuaMon: React.FC<ModalSuaMonProps> = ({
                                                             editProductName,
                                                             editBasePrice,
                                                             editSize,
+                                                            availableSizes,
                                                             setEditSize,
                                                             editToppings,
                                                             onToggleEditTopping,
@@ -87,7 +89,7 @@ export const ModalSuaMon: React.FC<ModalSuaMonProps> = ({
                 <div>
                     <div className="text-xs font-semibold text-[#124E35] mb-2">Kích cỡ (Size)</div>
                     <div className="grid grid-cols-3 gap-2">
-                        {(['S', 'M', 'L'] as SizeType[]).map((size) => {
+                        {availableSizes.map((size) => {
                             const extra = getSizeExtra(size);
                             const label = `Size ${size} (${extra > 0 ? '+' : ''}${formatPrice(extra)})`;
                             const isSelected = editSize === size;
@@ -107,6 +109,9 @@ export const ModalSuaMon: React.FC<ModalSuaMonProps> = ({
                             );
                         })}
                     </div>
+                    {availableSizes.length === 0 && (
+                        <p className="text-xs text-red-700 mt-2">Không có size đang bán; vui lòng đóng và tải lại thực đơn.</p>
+                    )}
                 </div>
 
                 <div>
@@ -235,7 +240,8 @@ export const ModalSuaMon: React.FC<ModalSuaMonProps> = ({
                     <button
                         type="button"
                         onClick={onSave}
-                        className="w-full py-2.5 bg-[#124E35] text-[#F5F0E1] text-xs font-semibold rounded-lg cursor-pointer hover:opacity-95 transition-colors"
+                        disabled={!availableSizes.includes(editSize)}
+                        className="w-full py-2.5 disabled:opacity-50 bg-[#124E35] text-[#F5F0E1] text-xs font-semibold rounded-lg cursor-pointer hover:opacity-95 transition-colors"
                     >
                         Lưu thay đổi
                     </button>

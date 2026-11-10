@@ -176,6 +176,15 @@ export interface Product {
     isActive?: boolean;
     version?: number;
     sizePrices?: Record<SizeType, number>;
+
+}
+
+// Chi cho chon nhung size co gia trong product_size_prices.
+export function laySizeKhaDung(product: Product): SizeType[] {
+    return (['S', 'M', 'L'] as SizeType[]).filter((size) => {
+        const price = product.sizePrices?.[size];
+        return typeof price === 'number' && Number.isFinite(price) && price > 0;
+    });
 }
 
 export interface User {
@@ -221,7 +230,7 @@ export interface OrderItem {
     sugar?: string;
     ice?: string;
     note?: string;
-    toppings?: {toppingId: string; servings: number}[];
+    toppings?: {toppingId: string; servings: number; name?: string}[];
 }
 
 export interface Payment {
@@ -593,7 +602,11 @@ export function mapProduct(raw: any, fallbackId = 1): Product {
         const sizeM = raw.product_size_prices.find((s: any) => s.size === 'M') || raw.product_size_prices[0];
         price = Number(sizeM?.price ?? 0);
     }
-    if (!price && sizePrices.M) price = sizePrices.M;
+    if (!price) {
+        price = (['S', 'M', 'L'] as SizeType[])
+            .map((size) => sizePrices[size])
+            .find((value) => value > 0) ?? 0;
+    }
     if (!price) {
         const defaultMatched = DEFAULT_PRODUCTS.find((p) => p.code === code || p.id === String(raw.id));
         if (defaultMatched) price = defaultMatched.price;
@@ -622,7 +635,8 @@ export function mapProduct(raw: any, fallbackId = 1): Product {
         code,
         name: raw.name || raw.product_name || `Món #${id}`,
         price,
-        sizePrices: sizePrices.M ? sizePrices : DEFAULT_PRODUCTS.find(p => p.code === code)?.sizePrices,
+        // Khong su dung gia mac dinh khi API khong tra size.
+        sizePrices,
         imageUrl: layDuongDanAnh(imageUrl),
         imageKey,
         stock,
@@ -665,7 +679,9 @@ export function mapOrderItem(raw: any): OrderItem {
         ice: raw.ice,
         note: raw.note,
         toppings: Array.isArray(raw.toppings) ? raw.toppings.map((t: any) => ({
-            toppingId: String(t.toppingId ?? t.topping_id), servings: Number(t.servings ?? 1),
+            toppingId: String(t.toppingId ?? t.topping_id),
+            servings: Number(t.servings ?? 1),
+            name: String(t.topping?.name ?? t.name ?? t.toppingName ?? ''),
         })) : [],
     };
 }

@@ -9,8 +9,8 @@ Dự án gồm:
 
 Cần cài Node.js, npm và PostgreSQL.
 
-Tạo database tên brewlite bằng pgAdmin.
-Nếu database mới, chạy file backend/prisma/BrewLite_PostgreSQL_hoan_chinh.sql trong Query Tool.
+Tạo database tên dbBrewLite bằng pgAdmin.
+Nếu database mới, chạy file backend/prisma/dbBrewLite.sql trong Query Tool.
 Nếu database đã có dữ liệu, không chạy lại file SQL tạo toàn bộ bảng.
 
 Mở terminal thứ nhất tại thư mục BrewLite, chạy:
@@ -18,7 +18,7 @@ cd backend
 npm ci
 
 Tạo file backend/.env (điền đúng mật khẩu PostgreSQL của máy):
-DATABASE_URL="postgresql://postgres:MAT_KHAU@localhost:5432/brewlite?schema=public"
+DATABASE_URL="postgresql://postgres:MAT_KHAU@localhost:5432/dbBrewLite?schema=public"
 JWT_SECRET="thay_bang_mot_chuoi_bi_mat_dai_va_ngau_nhien"
 FRONTEND_URL="http://localhost:3000"
 PORT=4000
@@ -27,7 +27,7 @@ Chạy tiếp:
 npx prisma generate
 npm run dev
 
-Mở terminal thứ hai tại thư mục BrewLite, chạy:
+**Mở terminal thứ hai tại thư mục BrewLite, chạy:**
 cd frontend
 npm ci
 
@@ -40,8 +40,8 @@ npm run dev
 Truy cập giao diện: http://localhost:3000
 Địa chỉ API: http://localhost:4000
 
-2. Chạy bằng Docker
 
+2. Chạy bằng Docker
 Cần cài và mở Docker Desktop.
 Giữ backend/Dockerfile và frontend/Dockerfile.frontend.
 Dùng một file docker-compose.yml ở thư mục gốc BrewLite.

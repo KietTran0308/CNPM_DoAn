@@ -28,6 +28,7 @@ import {
     QUERY_KEYS,
     formatPrice,
     tinhGiaTopping,
+    laySizeKhaDung,
 } from '../api';
 
 import { useGioHang } from '../store/useGioHang';
@@ -166,6 +167,9 @@ function UngDungDatNuoc() {
 
     const [selectedProduct, setSelectedProduct] = useState<Product>(DEFAULT_PRODUCTS[2]);
     const [detailLoading, setDetailLoading] = useState(false);
+    const [detailError, setDetailError] = useState<string | null>(null);
+    const [detailProductId, setDetailProductId] = useState('');
+    const detailRequestRef = useRef(0);
     const [selectedSize, setSelectedSize] = useState<SizeType>('M');
     const [selectedToppings, setSelectedToppings] = useState<ToppingType[]>([]);
     const [selectedSugar, setSelectedSugar] = useState<SugarType>('100%');
@@ -276,10 +280,12 @@ function UngDungDatNuoc() {
     };
 
     const moChiTietMon = async (productId: string) => {
+        const requestId = ++detailRequestRef.current;
+        setDetailProductId(productId);
+        setDetailError(null);
         setStockNotice(null);
         setDetailLoading(true);
         setManHinhHienTai('product-detail');
-        setSelectedSize('M');
         setSelectedToppings([]);
         setSelectedSugar('100%');
         setSelectedIce('100%');
@@ -292,12 +298,19 @@ function UngDungDatNuoc() {
                 queryKey: QUERY_KEYS.chiTietMon(productId),
                 queryFn: () => api.getProductById(productId),
             });
-            if (product) {
-                setSelectedProduct(product);
+            if (requestId !== detailRequestRef.current) return;
+            if (!product || product.id !== productId) {
+                throw new Error('Không tìm thấy thông tin món này.');
             }
-        } catch {
+            setSelectedProduct(product);
+            const sizes = laySizeKhaDung(product);
+            setSelectedSize(sizes.includes('M') ? 'M' : sizes[0] ?? 'M');
+        } catch (error: any) {
+            if (requestId === detailRequestRef.current) {
+                setDetailError(error?.message || 'Không tải được chi tiết món.');
+            }
         } finally {
-            setDetailLoading(false);
+            if (requestId === detailRequestRef.current) setDetailLoading(false);
         }
     };
 
@@ -417,13 +430,15 @@ function UngDungDatNuoc() {
         const soLuongHienCo = laySoLuongMonTrongGio(product.id);
         if (soLuongHienCo + 1 > product.stock) return;
 
+        const size = laySizeKhaDung(product)[0];
+        if (!size) return;
         const newItem: OrderItem = {
             id: 'item_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
             orderId: '',
             productId: product.id,
-            size: 'S',
+            size,
             qty: 1,
-            lineTotal: giaTheoSize(product, 'S'),
+            lineTotal: giaTheoSize(product, size),
             sugar: '100%',
             ice: '100%',
         };
@@ -433,7 +448,7 @@ function UngDungDatNuoc() {
             toppings: [],
             sugar: '100%',
             ice: '100%',
-            unitPrice: giaTheoSize(product, 'S'),
+            unitPrice: giaTheoSize(product, size),
             stock: product.stock,
         };
         addLineToCart(newCartLine);
@@ -441,6 +456,10 @@ function UngDungDatNuoc() {
 
     const xuLyThemVaoGio = () => {
         setStockNotice(null);
+        if (detailLoading || detailError || !laySizeKhaDung(selectedProduct).includes(selectedSize)) {
+            setStockNotice('Vui lòng chọn kích cỡ đang được bán.');
+            return;
+        }
 
         if (selectedProduct.isActive === false) {
             setStockNotice('Món nước này hiện đang tạm ngừng kinh doanh.');
@@ -493,7 +512,9 @@ function UngDungDatNuoc() {
         setEditProductId(line.item.productId);
         setEditProductName(line.productName);
         setEditBasePrice(basePrice);
-        setEditSize((line.item.size as SizeType) || 'M');
+        const sizes = prod ? laySizeKhaDung(prod) : [];
+        const currentSize = line.item.size as SizeType;
+        setEditSize(sizes.includes(currentSize) ? currentSize : sizes[0] ?? currentSize);
         setEditToppings([...line.toppings]);
         setEditSugar((line.sugar as SugarType) || '100%');
         setEditIce((line.ice as IceType) || '100%');
@@ -513,7 +534,7 @@ function UngDungDatNuoc() {
         + tinhGiaTopping(editToppings, availableToppings);
 
     const luuMonDaSuaTrongGio = () => {
-        if (!editingItemId) return;
+        if (!editingItemId || !productDangSua || !laySizeKhaDung(productDangSua).includes(editSize)) return;
         const newUnitPrice = donGiaSauKhiSua;
         const newLineTotal = newUnitPrice * editQty;
 
@@ -955,6 +976,8 @@ function UngDungDatNuoc() {
                         toppings={availableToppings}
                         user={user}
                         detailLoading={detailLoading}
+                        detailError={detailError}
+                        onRetry={() => void moChiTietMon(detailProductId)}
                         stockNotice={stockNotice}
                         selectedSize={selectedSize}
                         setSelectedSize={setSelectedSize}
@@ -971,7 +994,10 @@ function UngDungDatNuoc() {
                         currentUnitPrice={donGiaHienTai}
                         addingToCart={addingToCart}
                         onAddToCart={xuLyThemVaoGio}
-                        onBack={() => setManHinhHienTai('menu')}
+                        onBack={() => {
+                            detailRequestRef.current++;
+                            setManHinhHienTai('menu');
+                        }}
                     />
                 )}
 
@@ -1094,6 +1120,7 @@ function UngDungDatNuoc() {
                     editProductName={editProductName}
                     editBasePrice={editBasePrice}
                     editSize={editSize}
+                    availableSizes={productDangSua ? laySizeKhaDung(productDangSua) : []}
                     setEditSize={setEditSize}
                     editToppings={editToppings}
                     onToggleEditTopping={chonToppingKhiSua}

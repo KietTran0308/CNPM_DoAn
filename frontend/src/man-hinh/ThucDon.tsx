@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { ShoppingBag } from 'lucide-react';
 import {
     Product,
+    laySizeKhaDung,
     User,
     formatPrice,
     removeVietnameseTones,
@@ -82,7 +83,7 @@ export const ThucDon: React.FC<ThucDonProps> = ({
 
     const xuLyThemNhanh = (e: React.MouseEvent, item: Product) => {
         e.stopPropagation();
-        if (item.stock <= 0 || item.isActive === false || !onQuickAddProduct) return;
+        if (item.stock <= 0 || item.isActive === false || !onQuickAddProduct || laySizeKhaDung(item).length === 0) return;
         onQuickAddProduct(item);
         setIdVuaThemNhanh(item.id);
         setTimeout(() => {
@@ -267,9 +268,9 @@ export const ThucDon: React.FC<ThucDonProps> = ({
                                             {onQuickAddProduct && (
                                                 <button
                                                     type="button"
-                                                    disabled={hetHang}
+                                                    disabled={hetHang || laySizeKhaDung(item).length === 0}
                                                     aria-label={`Thêm nhanh ${item.name}`}
-                                                    title="Thêm nhanh vào giỏ (Size S, 100% đường/đá)"
+                                                    title={laySizeKhaDung(item).length ? `Thêm nhanh Size ${laySizeKhaDung(item)[0]} (100% đường/đá)` : 'Món chưa có size đang bán'}
                                                     onClick={(e) => xuLyThemNhanh(e, item)}
                                                     className={`px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg border text-[11px] sm:text-xs font-semibold shrink-0 transition-colors cursor-pointer ${
                                                         vuaThem

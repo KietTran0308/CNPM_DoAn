@@ -10,7 +10,7 @@
     "db:push": "prisma db push",
     "db:seed": "echo \"Du lieu mau: import prisma/BrewLite_PostgreSQL_hoan_chinh.sql vao database moi; KHONG chay len DB da co du lieu\"",
     "test": "jest --runInBand",
-    "test:integration": "jest --runInBand --testPathPattern=integration",
+    "test:integration": "node -e \"if (!process.env.TEST_DATABASE_URL) { console.error('Can khai bao TEST_DATABASE_URL tro den brewlite_test'); process.exit(1) }\" && jest --runInBand --testPathPattern=integration",
     "smoke": "node scripts/smoke.mjs",
     "lint": "tsc --noEmit",
     "test:e2e": "node scripts/e2e.mjs"

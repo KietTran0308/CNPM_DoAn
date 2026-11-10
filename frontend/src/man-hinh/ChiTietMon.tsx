@@ -12,6 +12,7 @@ import {
     IceType,
     DEFAULT_TOPPINGS,
     ToppingItem,
+    laySizeKhaDung,
 } from '../api';
 
 interface ChiTietMonProps {
@@ -19,6 +20,8 @@ interface ChiTietMonProps {
     toppings?: ToppingItem[];
     user: User | null;
     detailLoading: boolean;
+    detailError: string | null;
+    onRetry: () => void;
     stockNotice: string | null;
     selectedSize: SizeType;
     setSelectedSize: (size: SizeType) => void;
@@ -43,6 +46,8 @@ export const ChiTietMon: React.FC<ChiTietMonProps> = ({
                                                           toppings = DEFAULT_TOPPINGS,
                                                           user,
                                                           detailLoading,
+                                                          detailError,
+                                                          onRetry,
                                                           stockNotice,
                                                           selectedSize,
                                                           setSelectedSize,
@@ -62,6 +67,7 @@ export const ChiTietMon: React.FC<ChiTietMonProps> = ({
                                                           onBack,
                                                       }) => {
     const [loiAnh, setLoiAnh] = useState(false);
+    const availableSizes = laySizeKhaDung(selectedProduct);
     const tongTamTinh = currentUnitPrice * selectedQty;
     const anhDuPhong = layDuongDanAnh(ANH_MAC_DINH);
     const duongDanAnh = layDuongDanAnh(selectedProduct.imageUrl) || anhDuPhong;
@@ -79,7 +85,7 @@ export const ChiTietMon: React.FC<ChiTietMonProps> = ({
                         <ArrowLeft className="w-4 h-4" />
                     </button>
                     <span className="font-semibold text-base sm:text-lg text-[#124E35] truncate">
-            {selectedProduct.name}
+            {detailLoading ? 'Đang tải món...' : detailError ? 'Không tải được món' : selectedProduct.name}
           </span>
                 </div>
                 <span className="text-xs sm:text-sm font-mono tabular-nums border border-[#D5CCB4] px-3 py-1.5 rounded-lg bg-[#EDE6D1] text-[#124E35] font-medium shrink-0">
@@ -90,6 +96,13 @@ export const ChiTietMon: React.FC<ChiTietMonProps> = ({
             {detailLoading ? (
                 <div className="text-center text-sm py-16 text-[#124E35] bg-[#FBF9F5] border border-[#E2D9C0] rounded-xl font-medium">
                     Đang tải chi tiết món...
+                </div>
+            ) : detailError ? (
+                <div className="bg-[#FBF9F5] border border-[#E2D9C0] rounded-xl p-6 text-center space-y-3">
+                    <p className="text-sm text-[#124E35]">{detailError}</p>
+                    <button type="button" onClick={onRetry} className="px-4 py-2 bg-[#124E35] text-white rounded-lg text-sm">
+                        Thử tải lại
+                    </button>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-start">
@@ -160,8 +173,11 @@ export const ChiTietMon: React.FC<ChiTietMonProps> = ({
                             <div className="text-xs sm:text-sm font-semibold text-[#124E35] mb-2.5">
                                 Chọn kích cỡ (Size)
                             </div>
+                            {availableSizes.length === 0 && (
+                                <p className="text-xs text-red-700 mb-2">Món này chưa có size đang bán.</p>
+                            )}
                             <div className="grid grid-cols-3 gap-2.5">
-                                {(['S', 'M', 'L'] as SizeType[]).map(size => ({
+                                {availableSizes.map(size => ({
                                     size, label: `Size ${size}`, price: selectedProduct.sizePrices?.[size] ?? selectedProduct.price,
                                 })).map(({ size, label, price }) => {
                                     const isActive = selectedSize === size;
@@ -311,7 +327,7 @@ export const ChiTietMon: React.FC<ChiTietMonProps> = ({
                             <button
                                 type="button"
                                 onClick={onAddToCart}
-                                disabled={selectedProduct.stock <= 0 || selectedProduct.isActive === false || addingToCart}
+                                disabled={selectedProduct.stock <= 0 || selectedProduct.isActive === false || addingToCart || !availableSizes.includes(selectedSize)}
                                 className="w-full py-3 bg-[#124E35] text-[#F5F0E1] font-semibold text-sm rounded-lg cursor-pointer hover:opacity-95 disabled:bg-neutral-200 disabled:text-neutral-400 transition-colors flex items-center justify-center gap-2"
                             >
                                 <ShoppingBag className="w-4 h-4" />
