@@ -1,30 +1,30 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
 export const LOGO = {
-    chinh: '/images/logo.png',
-    favicon: '/images/logo.png',
-    bannerTrangChu: '/images/logo.png',
+    chinh: '/images/logo.jpg',
+    favicon: '/images/logo.jpg',
+    bannerTrangChu: '/images/logo.jpg',
 };
 
 export const BACKGROUND = '/images/background.png';
 
-export const ANH_MAC_DINH = '/images/caphesua.png';
+export const ANH_MAC_DINH = '/images/caphesua.jpg';
 
 export const ANH_MON_NUOC = {
-    caPheSua: '/images/caphesua.png',
-    americano: '/images/americano.png',
-    cappuccino: '/images/capuchino.png',
-    traDao: '/images/tradaocamsa.png',
-    caPheMuoi: '/images/caphemuoi.png',
-    caPheTrung: '/images/caphetrung.png',
-    bacXiu: '/images/bacxiu.png',
-    caPheCotDua: '/images/caphecotdua.png',
-    caPheSuaTuoiSuongSao: '/images/caphesuatuoisuongsao.png',
-    traSenVang: '/images/trasenvang.png',
-    traDaoCamSa: '/images/tradaocamsa.png',
-    traVaiHoaHong: '/images/travaihoahong.png',
-    traMangCau: '/images/tramangcau.png',
-    traOLongNhanNhuc: '/images/tralongnhanhatchia.png',
+    caPheSua: '/images/caphesua.jpg',
+    americano: '/images/americano.jpg',
+    cappuccino: '/images/capuchino.jpg',
+    traDao: '/images/tradaocamsa.jpg',
+    caPheMuoi: '/images/caphemuoi.jpg',
+    caPheTrung: '/images/caphetrung.jpg',
+    bacXiu: '/images/bacxiu.jpg',
+    caPheCotDua: '/images/caphecotdua.jpg',
+    caPheSuaTuoiSuongSao: '/images/caphesuatuoisuongsao.jpg',
+    traSenVang: '/images/trasenvang.jpg',
+    traDaoCamSa: '/images/tradaocamsa.jpg',
+    traVaiHoaHong: '/images/travaihoahong.jpg',
+    traMangCau: '/images/tramangcau.jpg',
+    traOLongNhanNhuc: '/images/tralongnhanhatchia.jpg',
 };
 
 export function layDuongDanAnh(duongDan?: string): string {
