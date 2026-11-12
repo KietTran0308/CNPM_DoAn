@@ -6,6 +6,8 @@ import { AppModule } from './AppModule';
 
 async function bootstrap() {
     const app = await NestFactory.create(AppModule);
+    // Render đặt reverse proxy trước ứng dụng; chỉ tin proxy gần nhất để lấy req.ip.
+    app.getHttpAdapter().getInstance().set('trust proxy', 1);
 
     app.useGlobalPipes(
         new ValidationPipe({

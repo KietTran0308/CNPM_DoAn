@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { OrdersService, PricingService } from './orders.service';
 import { PaymentsService } from '../payments/payments.service';
+import { VnpayService } from '../payments/vnpay.service';
 import { PrismaService } from '../prisma.service';
 
 // Chay voi PostgreSQL rieng: TEST_DATABASE_URL phai tro den database brewlite_test.
@@ -114,7 +115,7 @@ integration('Hai don thanh toan dong thoi - ton kho', () => {
 
     it('chi 1 don PAID khi kho chi du 1 ly', async () => {
         const ordersService = new OrdersService(prisma as PrismaService, new PricingService());
-        const paymentsService = new PaymentsService(prisma as PrismaService, ordersService);
+        const paymentsService = new PaymentsService(prisma as PrismaService, {} as VnpayService, ordersService);
 
         const results = await Promise.allSettled(orderIds.map((orderId, index) =>
             paymentsService.pay(userIds[index], `stock-test-${index}-${randomUUID()}`, {

@@ -29,6 +29,7 @@ import {
     ParseUUIDPipe,
     Patch,
     Post,
+    Query,
     Req,
     UseGuards,
 } from "@nestjs/common";
@@ -125,6 +126,12 @@ export class OrdersController {
     @Get("me")
     mine(@Req() req: { user: CurrentUser }) {
         return this.ordersService.mine(req.user.id);
+    }
+
+    @Get('queue')
+    queue(@Req() req: { user: CurrentUser }, @Query('limit') rawLimit?: string) {
+        const limit = rawLimit && /^\d+$/.test(rawLimit) ? Number(rawLimit) : 50;
+        return this.ordersService.queue(req.user.role, limit);
     }
 
     @Patch(":id/status")

@@ -2,6 +2,8 @@ import React from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { User, OrderStatus, formatPrice, CartLine } from '../api';
 
+const DEMO_PAYMENTS = process.env.NEXT_PUBLIC_ENABLE_DEMO_PAYMENTS === 'true';
+
 interface ThanhToanProps {
     user: User | null;
     rawSubtotal?: number;
@@ -30,12 +32,6 @@ interface ThanhToanProps {
     setPaymentMethod: (method: 'wallet' | 'bank') => void;
     walletType: 'MoMo' | 'VNPay';
     setWalletType: (type: 'MoMo' | 'VNPay') => void;
-    cardNumber: string;
-    cardExpiry: string;
-    cardCvv: string;
-    onCardNumberChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    onExpiryChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
-    onCvvChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     onBackToCart: () => void;
     onRetryPayment: () => void;
     onCancelCurrentOrder: () => void;
@@ -70,12 +66,6 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                                                         setPaymentMethod,
                                                         walletType,
                                                         setWalletType,
-                                                        cardNumber,
-                                                        cardExpiry,
-                                                        cardCvv,
-                                                        onCardNumberChange,
-                                                        onExpiryChange,
-                                                        onCvvChange,
                                                         onBackToCart,
                                                         onRetryPayment,
                                                         onCancelCurrentOrder,
@@ -159,7 +149,7 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                             onClick={() => setPaymentMethod('wallet')}
                         >
                             <div className="flex items-center justify-between text-xs sm:text-sm font-semibold text-[#124E35]">
-                                <span>Ví điện tử (Mô phỏng MoMo / VNPay)</span>
+                                <span>Ví điện tử (MoMo mô phỏng / VNPay Sandbox)</span>
                                 <span
                                     className={`text-xs px-2.5 py-0.5 rounded border font-semibold ${
                                         paymentMethod === 'wallet'
@@ -174,7 +164,7 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                             {paymentMethod === 'wallet' && (
                                 <div className="pt-3.5 mt-3.5 border-t border-[#E2D9C0] space-y-3.5">
                                     <div className="grid grid-cols-2 gap-2.5">
-                                        {(['MoMo', 'VNPay'] as const).map((type) => (
+                                        {(DEMO_PAYMENTS ? ['MoMo', 'VNPay'] as const : ['VNPay'] as const).map((type) => (
                                             <button
                                                 key={type}
                                                 type="button"
@@ -193,7 +183,12 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                                         ))}
                                     </div>
 
-                                    <div className="pt-1 text-center space-y-2">
+                                    {walletType === 'VNPay' ? (
+                                        <div className="rounded-lg border border-[#D5CCB4] bg-[#FBF9F5] p-4 text-xs text-neutral-700">
+                                            Bạn sẽ được chuyển tới trang thanh toán VNPay Sandbox qua kết nối HTTPS.
+                                            Không sử dụng mã QR minh họa làm mã thanh toán thật.
+                                        </div>
+                                    ) : <div className="pt-1 text-center space-y-2">
                                         <div className="w-36 h-36 mx-auto border border-[#D5CCB4] rounded-xl p-3 bg-[#FBF9F5] flex items-center justify-center">
                                             <svg
                                                 viewBox="0 0 100 100"
@@ -277,12 +272,12 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                                         <p className="text-[11px] font-mono text-neutral-500">
                                             Nội dung: BREW-{finalPayable}
                                         </p>
-                                    </div>
+                                    </div>}
                                 </div>
                             )}
                         </div>
 
-                        <div
+                        {DEMO_PAYMENTS && <div
                             className={`p-4 border rounded-xl cursor-pointer transition-colors bg-white ${
                                 paymentMethod === 'bank'
                                     ? 'border-[#124E35]'
@@ -304,47 +299,11 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                             </div>
 
                             {paymentMethod === 'bank' && (
-                                <div
-                                    className="pt-3.5 mt-3.5 border-t border-[#E2D9C0] space-y-3"
-                                    onClick={(e) => e.stopPropagation()}
-                                >
-                                    <div>
-                                        <label className="block text-xs font-medium text-[#124E35] mb-1">Số thẻ</label>
-                                        <input
-                                            type="text"
-                                            value={cardNumber}
-                                            onChange={onCardNumberChange}
-                                            placeholder="0000 0000 0000 0000"
-                                            className="w-full p-2.5 border border-[#D5CCB4] rounded-lg bg-white text-xs sm:text-sm text-neutral-900 font-mono focus:outline-none focus:border-[#124E35] focus:ring-1 focus:ring-[#124E35] transition-colors"
-                                        />
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-xs font-medium text-[#124E35] mb-1">Ngày hết hạn</label>
-                                            <input
-                                                type="text"
-                                                value={cardExpiry}
-                                                onChange={onExpiryChange}
-                                                placeholder="MM/YY"
-                                                className="w-full p-2.5 border border-[#D5CCB4] rounded-lg bg-white text-xs sm:text-sm text-neutral-900 font-mono focus:outline-none focus:border-[#124E35] focus:ring-1 focus:ring-[#124E35] transition-colors"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-xs font-medium text-[#124E35] mb-1">Mã bảo mật CVV</label>
-                                            <input
-                                                type="password"
-                                                maxLength={3}
-                                                value={cardCvv}
-                                                onChange={onCvvChange}
-                                                placeholder="CVV"
-                                                className="w-full p-2.5 border border-[#D5CCB4] rounded-lg bg-white text-xs sm:text-sm text-neutral-900 font-mono focus:outline-none focus:border-[#124E35] focus:ring-1 focus:ring-[#124E35] transition-colors"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
+                                <p className="mt-3 text-xs text-amber-700" role="note">
+                                    Đây chỉ là thanh toán thẻ MÔ PHỎNG. Không nhập số thẻ, ngày hết hạn hoặc CVV thật.
+                                </p>
                             )}
-                        </div>
+                        </div>}
                     </div>
                 </div>
 
@@ -538,7 +497,7 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                         </div>
                     )}
 
-                    <label className="flex items-center gap-2 text-xs text-neutral-500 cursor-pointer select-none pt-1">
+                    {DEMO_PAYMENTS && finalPayable > 0 && !(paymentMethod === 'wallet' && walletType === 'VNPay') && <label className="flex items-center gap-2 text-xs text-neutral-500 cursor-pointer select-none pt-1">
                         <input
                             type="checkbox"
                             checked={simulatePaymentError}
@@ -546,7 +505,10 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                             className="w-3.5 h-3.5 rounded border-[#D5CCB4] text-[#124E35] focus:ring-[#124E35] cursor-pointer accent-[#124E35]"
                         />
                         <span>Mô phỏng lỗi giao dịch</span>
-                    </label>
+                    </label>}
+                    {DEMO_PAYMENTS && <p className="text-xs text-amber-700">Ví MoMo và thẻ ngân hàng chỉ mô phỏng, không ghi nhận tiền thật.</p>}
+                    {finalPayable > 0 && paymentMethod === 'wallet' && walletType === 'VNPay' &&
+                        <p className="text-xs text-neutral-600">Bạn sẽ chuyển tới VNPay Sandbox. Đơn chỉ thành công khi hệ thống nhận IPN xác nhận.</p>}
 
                     <button
                         type="button"
@@ -556,7 +518,7 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                     >
                         {checkoutLoading
                             ? 'Đang xử lý giao dịch...'
-                            : `Xác nhận thanh toán · ${formatPrice(finalPayable)}`}
+                            : finalPayable === 0 ? 'Xác nhận đơn 0đ (không qua cổng thanh toán)' : `Xác nhận thanh toán · ${formatPrice(finalPayable)}`}
                     </button>
                 </div>
             </div>

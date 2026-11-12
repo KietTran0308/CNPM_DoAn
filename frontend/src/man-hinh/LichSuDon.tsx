@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { Order, OrderStatus, Product, User, formatPrice } from '../api';
+
+const DEMO_PAYMENTS = process.env.NEXT_PUBLIC_ENABLE_DEMO_PAYMENTS === 'true';
 
 export interface TienTrinhDonProps {
     status: OrderStatus;
@@ -112,7 +114,7 @@ interface LichSuDonProps {
     products: Product[];
     onBackToMenu: () => void;
     onTransition: (orderId: string, targetStatus: OrderStatus) => void;
-    onRetryFromHistory: (orderId: string) => void;
+    onRetryFromHistory: (orderId: string, method: 'VNPAY' | 'WALLET' | 'CARD') => void;
     statusNotice?: { type: 'success' | 'error' | 'ready'; message: string; orderId?: string } | null;
     onClearNotice?: () => void;
 }
@@ -128,6 +130,7 @@ export const LichSuDon: React.FC<LichSuDonProps> = ({
                                                         statusNotice,
                                                         onClearNotice,
                                                     }) => {
+    const [retryMethodByOrder, setRetryMethodByOrder] = useState<Record<string, 'VNPAY' | 'WALLET' | 'CARD'>>({});
     const layTenTrangThai = (status: OrderStatus) => {
         switch (status) {
             case 'PENDING':
@@ -169,8 +172,8 @@ export const LichSuDon: React.FC<LichSuDonProps> = ({
           </span>
                 </div>
 
-                {statusNotice && statusNotice.type !== 'error' && (
-                    <div className="px-4 py-3 rounded-xl border border-[#D5CCB4] bg-[#EDE6D1] text-[#124E35] text-xs sm:text-sm font-medium flex justify-between items-start gap-2">
+                {statusNotice && (
+                    <div className={`px-4 py-3 rounded-xl border text-xs sm:text-sm font-medium flex justify-between items-start gap-2 ${statusNotice.type === 'error' ? 'border-red-300 bg-red-50 text-red-800' : 'border-[#D5CCB4] bg-[#EDE6D1] text-[#124E35]'}`}>
                         <span className="leading-relaxed">{statusNotice.message}</span>
                         {onClearNotice && (
                             <button
@@ -295,13 +298,28 @@ export const LichSuDon: React.FC<LichSuDonProps> = ({
                                                 Hủy đơn
                                             </button>
                                             {(status === 'PENDING' || status === 'PAYMENT_FAILED') && (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => onRetryFromHistory(order.id)}
-                                                    className="px-3.5 py-1.5 bg-[#124E35] text-[#F5F0E1] rounded-lg text-xs font-semibold cursor-pointer hover:opacity-95 transition-colors"
-                                                >
-                                                    Thử lại thanh toán
-                                                </button>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    {order.total > 0 && (
+                                                        <select
+                                                            aria-label={`Phương thức thanh toán đơn ${order.orderCode ?? order.id}`}
+                                                            value={retryMethodByOrder[order.id] || 'VNPAY'}
+                                                            onChange={e => setRetryMethodByOrder(prev => ({...prev,
+                                                                [order.id]: e.target.value as 'VNPAY' | 'WALLET' | 'CARD'}))}
+                                                            className="px-2 py-1.5 border border-[#D5CCB4] rounded-lg text-xs bg-white text-[#124E35]"
+                                                        >
+                                                            <option value="VNPAY">VNPay</option>
+                                                            {DEMO_PAYMENTS && <option value="WALLET">Ví mô phỏng</option>}
+                                                            {DEMO_PAYMENTS && <option value="CARD">Thẻ mô phỏng</option>}
+                                                        </select>
+                                                    )}
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => onRetryFromHistory(order.id, retryMethodByOrder[order.id] || 'VNPAY')}
+                                                        className="px-3.5 py-1.5 bg-[#124E35] text-[#F5F0E1] rounded-lg text-xs font-semibold cursor-pointer hover:opacity-95 transition-colors"
+                                                    >
+                                                        {order.total === 0 ? 'Hoàn tất đơn 0đ' : 'Thử lại thanh toán'}
+                                                    </button>
+                                                </div>
                                             )}
                                         </div>
                                     )}

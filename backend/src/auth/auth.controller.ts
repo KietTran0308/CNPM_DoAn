@@ -1,4 +1,4 @@
-import {Body, Controller, Get, Post, Put, Req, UseGuards} from '@nestjs/common';
+import {Body, Controller, Get, Post, Put, Req, UseGuards, HttpException, HttpStatus} from '@nestjs/common';
 import {IsEmail, IsOptional, IsString, MaxLength, Matches, MinLength} from 'class-validator';
 import {AuthService} from './auth.service';
 import { JwtAuthGuard, CurrentUser } from './jwt.guard';
@@ -30,14 +30,36 @@ class ChangePasswordDto {
 
 @Controller('auth')
 export class AuthController {
+    private readonly attempts = new Map<string, { count: number; reset: number }>();
+    private limit(ip: string, action: string) {
+        const now = Date.now();
+        // Xóa bản ghi cũ để tránh tăng bộ nhớ mãi; vẫn chỉ bảo vệ theo một process.
+        if (this.attempts.size > 10000) {
+            for (const [key, value] of this.attempts) {
+                if (value.reset <= now) this.attempts.delete(key);
+            }
+        }
+        const key = `${action}:${ip}`;
+        const item = this.attempts.get(key);
+        if (!item || item.reset <= now) {
+            this.attempts.set(key, { count: 1, reset: now + 15 * 60_000 });
+        } else {
+            if (item.count >= (action === 'login' ? 10 : 5)) {
+                throw new HttpException('Bạn đã thử quá nhiều lần, vui lòng thử lại sau', HttpStatus.TOO_MANY_REQUESTS);
+            }
+            item.count++;
+        }
+    }
     constructor(private readonly auth: AuthService) {
     }
 
-    @Post('register') register(@Body() d: RegisterDto) {
+    @Post('register') register(@Req() req: { ip?: string }, @Body() d: RegisterDto) {
+        this.limit(req.ip || 'unknown', 'register');
         return this.auth.register(d.fullName, d.email, d.password, d.phone);
     }
 
-    @Post('login') login(@Body() d: LoginDto) {
+    @Post('login') login(@Req() req: { ip?: string }, @Body() d: LoginDto) {
+        this.limit(req.ip || 'unknown', 'login');
         return this.auth.login(d.email, d.password);
     }
 

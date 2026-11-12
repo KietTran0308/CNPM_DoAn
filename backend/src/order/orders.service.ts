@@ -174,6 +174,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                 expiresAt: {
                     lte: new Date(),
                 },
+                // Đơn còn phiên VNPay PENDING phải đối soát trước khi cho phép hủy.
+                payments: { none: { method: 'VNPAY', status: { in: ['PENDING', 'SUCCESS'] } } },
             },
             select: {
                 id: true,
@@ -527,6 +529,20 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         });
     }
 
+    // Hàng đợi đơn cho nhân viên/quản trị (không lộ token hay passwordHash).
+    async queue(role: string, limit = 50) {
+        if (role !== 'STAFF' && role !== 'ADMIN') {
+            throw new ForbiddenException('Chỉ nhân viên được xem hàng đợi');
+        }
+        return this.prisma.order.findMany({
+            where: { status: { in: [OrderStatus.PAID, OrderStatus.PREPARING, OrderStatus.READY] } },
+            orderBy: { createdAt: 'asc' },
+            take: Math.min(100, Math.max(1, limit)),
+            include: { orderItems: { include: { product: { select: { name: true } },
+                toppings: { include: { topping: { select: { name: true } } } } } } },
+        });
+    }
+
     // ====================================================
     // CHANGE ORDER STATUS
     // ====================================================
@@ -624,6 +640,17 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                         );
                     }
 
+                    // Không cho phép hủy khi gateway chưa xác minh HOẶC gateway đã thu tiền.
+                    // Kể cả order vẫn PENDING do thiếu kho/điểm cũng tuyệt đối không hủy âm thầm.
+                    const gatewayPayment = await tx.payment.findFirst({ where: {
+                        orderId, method: 'VNPAY', status: { in: ['PENDING', 'SUCCESS'] },
+                    }});
+                    if (gatewayPayment?.status === 'PENDING') {
+                        throw new ConflictException('VNPay chưa xác nhận; phải đối soát trước khi hủy');
+                    }
+                    if (gatewayPayment?.status === 'SUCCESS') {
+                        throw new ConflictException('VNPay đã thu tiền; cần xác minh và hoàn tiền thật trước khi hủy');
+                    }
                     assertTransition(order.status, OrderStatus.CANCELLED);
 
                     // ----------------------------------------------
@@ -660,26 +687,24 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                             },
                         });
 
-                        if (!payment) {
+                        // Đơn tổng 0 VND được xác nhận nội bộ, không có payment.
+                        // Chỉ cho phép thiếu payment nếu tổng đúng bằng 0.
+                        if (!payment && Number(order.total) !== 0) {
                             throw new ConflictException(
                                 "Không tìm thấy giao dịch thanh toán thành công",
                             );
                         }
 
-                        // Hoàn tiền mô phỏng.
-                        // Giữ status SUCCESS để bảo toàn lịch sử giao dịch gốc.
-                        await tx.payment.update({
-                            where: {
-                                id: payment.id,
-                            },
-                            data: {
-                                refundedAmount: payment.amount,
-                                // CHECK: so tien hoan = 0 thi refundedAt phai NULL.
-                                refundedAt: payment.amount.greaterThan(0)
-                                    ? new Date()
-                                    : null,
-                            },
-                        });
+                        if (payment) {
+                            // Hoàn tiền MÔ PHỎNG (VNPay thành công đã bị chặn phía trên).
+                            await tx.payment.update({
+                                where: { id: payment.id },
+                                data: {
+                                    refundedAmount: payment.amount,
+                                    refundedAt: payment.amount.greaterThan(0) ? new Date() : null,
+                                },
+                            });
+                        }
 
                         // Hoàn nguyên liệu đã trừ khi PAID, trước lúc pha chế.
                         const consumed = await tx.ingredientMovement.findMany({
@@ -705,11 +730,14 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                         // Hoàn tác điểm EARN được cộng khi thanh toán.
                         const earned = await tx.loyaltyTransaction.findFirst({where: {orderId, type: 'EARN'}});
                         if (earned) {
-                            const updatedPoints = await tx.user.updateMany({
-                                where: {id: userId, loyaltyPoints: {gte: earned.points}},
-                                data: {loyaltyPoints: {decrement: earned.points}},
-                            });
-                            if (updatedPoints.count !== 1) throw new ConflictException('Không đủ điểm để hoàn tác điểm đã thưởng');
+                            // Khách có thể đã sử dụng điểm vừa được thưởng.
+                            // Trừ số điểm còn lại, phần thiếu ghi nợ để khấu trừ vào lần EARN tiếp theo.
+                            const account = await tx.user.findUniqueOrThrow({where: {id: userId}});
+                            const deducted = Math.min(account.loyaltyPoints, earned.points);
+                            await tx.user.update({where: {id: userId}, data: {
+                                    loyaltyPoints: {decrement: deducted},
+                                    loyaltyDebt: {increment: earned.points - deducted},
+                                }});
                             await tx.loyaltyTransaction.create({data: {
                                     userId, orderId, points: earned.points,
                                     type: 'REVERSAL', reversesTransactionId: earned.id,
@@ -770,10 +798,13 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                                 );
                             }
 
+                            const account = await tx.user.findUniqueOrThrow({ where: { id: userId } });
+                            const offsetDebt = Math.min(account.loyaltyDebt, redeemed.points);
                             await tx.user.update({
                                 where: { id: userId },
                                 data: {
-                                    loyaltyPoints: { increment: redeemed.points },
+                                    loyaltyPoints: { increment: redeemed.points - offsetDebt },
+                                    loyaltyDebt: { decrement: offsetDebt },
                                 },
                             });
                             await tx.loyaltyTransaction.create({

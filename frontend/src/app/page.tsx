@@ -133,6 +133,11 @@ const ThanhDieuHuong: React.FC<ThanhDieuHuongProps> = ({
                     >
                         Lịch sử đơn hàng
                     </button>
+                    {(user.role === 'STAFF' || user.role === 'ADMIN') && (
+                        <a href="/staff" className="block px-3.5 py-2.5 border-b border-[#E2D9C0] hover:bg-[#EDE6D1] font-semibold">
+                            Màn hình quầy và kho
+                        </a>
+                    )}
                     <button
                         type="button"
                         onClick={onLogout}
@@ -207,19 +212,39 @@ function UngDungDatNuoc() {
     const finalPayablePrice = Math.max(0, totalCartPrice - pointsDiscount);
 
     const [paymentMethod, setPaymentMethod] = useState<'wallet' | 'bank'>('wallet');
-    const [walletType, setWalletType] = useState<'MoMo' | 'VNPay'>('MoMo');
-    const [cardNumber, setCardNumber] = useState('9704 1985 2468 1234');
-    const [cardExpiry, setCardExpiry] = useState('12/28');
-    const [cardCvv, setCardCvv] = useState('888');
+    const [walletType, setWalletType] = useState<'MoMo' | 'VNPay'>(process.env.NEXT_PUBLIC_ENABLE_DEMO_PAYMENTS === 'true' ? 'MoMo' : 'VNPay');
     const [simulatePaymentError, setSimulatePaymentError] = useState(false);
     const [currentPendingOrderId, setCurrentPendingOrderId] = useState<string | null>(null);
     // Mỗi lần gửi lại cùng request thanh toán giữ nguyên key (kể cả timeout HTTP).
     const paymentKeysRef = useRef<Record<string, string>>({});
+    const resetPaymentKey = (orderId: string, method: string, simulateFailure: boolean) => {
+        const signature = `${orderId}:${method}:${simulateFailure}`;
+        delete paymentKeysRef.current[signature];
+        sessionStorage.removeItem(`brewlite_payment_key_${signature}`);
+    };
     const getPaymentKey = (orderId: string, method: string, simulateFailure: boolean) => {
         const signature = `${orderId}:${method}:${simulateFailure}`;
-        if (!paymentKeysRef.current[signature]) paymentKeysRef.current[signature] = crypto.randomUUID();
+        if (!paymentKeysRef.current[signature]) {
+            const keyName = `brewlite_payment_key_${signature}`;
+            paymentKeysRef.current[signature] = sessionStorage.getItem(keyName) || crypto.randomUUID();
+            sessionStorage.setItem(keyName, paymentKeysRef.current[signature]);
+        }
         return paymentKeysRef.current[signature];
     };
+    useEffect(() => {
+        // Quay về khi mất mạng/đóng tab VNPay: không tạo đơn mới khi gateway còn chờ.
+        const pendingId = sessionStorage.getItem('brewlite_vnpay_order');
+        if (!pendingId || !getStoredToken()) return;
+        api.getVnpayStatus(pendingId).then(result => {
+            if (['PAID', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED'].includes(result.orderStatus)) {
+                sessionStorage.removeItem('brewlite_vnpay_order');
+                if (result.orderStatus !== 'CANCELLED') sessionStorage.removeItem('brewlite_create_key');
+            } else if (result.payment?.status !== 'FAILED') {
+                setCurrentPendingOrderId(pendingId);
+            }
+        }).catch(() => { /* Vẫn giữ key để kiểm tra sau, không tự hủy. */ });
+    }, []);
+
     const [checkoutStatus, setCheckoutStatus] = useState<OrderStatus | null>(null);
     const [checkoutLoading, setCheckoutLoading] = useState(false);
     const [stockError, setStockError] = useState<string | null>(null);
@@ -331,9 +356,6 @@ function UngDungDatNuoc() {
     const capNhatLichSuDon = (updater: (prev: Order[]) => Order[]) => {
         setOrderHistory((prev) => {
             const updated = updater(prev);
-            try {
-                localStorage.setItem('brewlite_orders_history', JSON.stringify(updated));
-            } catch {}
             return updated;
         });
     };
@@ -592,24 +614,8 @@ function UngDungDatNuoc() {
         }
     };
 
-    const xuLyNhapSoThe = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const raw = e.target.value.replace(/\D/g, '').slice(0, 16);
-        const formatted = raw.match(/.{1,4}/g)?.join(' ') || raw;
-        setCardNumber(formatted);
-    };
 
-    const xuLyNhapHanThe = (e: React.ChangeEvent<HTMLInputElement>) => {
-        let raw = e.target.value.replace(/\D/g, '').slice(0, 4);
-        if (raw.length >= 3) {
-            raw = `${raw.slice(0, 2)}/${raw.slice(2)}`;
-        }
-        setCardExpiry(raw);
-    };
 
-    const xuLyNhapCvv = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const raw = e.target.value.replace(/\D/g, '').slice(0, 3);
-        setCardCvv(raw);
-    };
 
     const dinhDangThoiGian = (d: Date = new Date()) => {
         const pad = (n: number) => String(n).padStart(2, '0');
@@ -675,26 +681,37 @@ function UngDungDatNuoc() {
                 officialCode = existingOrder.orderCode;
             }
 
-            const methodString = paymentMethod === 'wallet' ? 'WALLET' : 'CARD';
-
-            const cleanCardDigits = cardNumber.replace(/\D/g, '');
-            const loiTheNganHang = paymentMethod === 'bank' && cleanCardDigits.endsWith('0000');
-            const gayLoi = epThanhCong ? false : simulatePaymentError || loiTheNganHang;
-
-            const idempotencyKey = getPaymentKey(orderId, methodString, gayLoi);
-            const paymentPayload: Payment = {
-                id: 'pay_' + Date.now().toString(36),
-                orderId,
-                idempotencyKey,
-                amount: officialTotal,
-                method: methodString,
-                simulateFailure: gayLoi,
-                pointsUsed: actualPointsToUse,
-                pointsDiscount,
-            };
-
-            const targetStatus: OrderStatus = gayLoi ? 'PAYMENT_FAILED' : 'PAID';
-            const payRes = await api.processPayment(paymentPayload, targetStatus);
+            // Luôn dùng tổng tiền chính thức Backend đã tính (không dùng ước tính UI).
+            let payRes: { status: OrderStatus; total?: number; earnedPoints?: number; isDuplicate?: boolean };
+            if (officialTotal === 0) {
+                // Tổng 0đ: không tạo giao dịch VNPay/WALLET giả.
+                payRes = await api.completeZeroTotalOrder(orderId);
+            } else if (paymentMethod === 'wallet' && walletType === 'VNPay') {
+                // IPN mới xác nhận thanh toán; KHÔNG chuyển PAID tại trình duyệt.
+                const currentGateway = await api.getVnpayStatus(orderId);
+                if (currentGateway.requiresReconciliation || currentGateway.payment?.status === 'SUCCESS') {
+                    throw new Error('VNPay đã xác nhận tiền nhưng đơn cần đối soát. Không thanh toán thêm.');
+                }
+                if (currentGateway.payment?.status === 'PENDING') {
+                    throw new Error('Giao dịch VNPay đang chờ xác nhận. Không gửi thanh toán mới; hãy kiểm tra lịch sử đơn.');
+                }
+                if (currentGateway.payment?.status === 'FAILED') resetPaymentKey(orderId, 'VNPAY', false);
+                const idempotencyKey = getPaymentKey(orderId, 'VNPAY', false);
+                const vnpay = await api.createVnpayPayment(orderId, idempotencyKey);
+                sessionStorage.setItem('brewlite_vnpay_order', orderId);
+                window.location.assign(vnpay.paymentUrl);
+                return;
+            } else {
+                const methodString = paymentMethod === 'wallet' ? 'WALLET' : 'CARD';
+                const gayLoi = epThanhCong ? false : simulatePaymentError;
+                const idempotencyKey = getPaymentKey(orderId, methodString, gayLoi);
+                const paymentPayload: Payment = {
+                    id: 'pay_' + Date.now().toString(36), orderId, idempotencyKey,
+                    amount: officialTotal, method: methodString, simulateFailure: gayLoi,
+                    pointsUsed: actualPointsToUse, pointsDiscount,
+                };
+                payRes = await api.processPayment(paymentPayload, gayLoi ? 'PAYMENT_FAILED' : 'PAID');
+            }
 
             if (payRes.status === 'PAID') {
                 const paidOrder: Order = {
@@ -795,101 +812,90 @@ function UngDungDatNuoc() {
         setManHinhHienTai('cart');
     };
 
-    const xuLyChuyenTrangThaiDon = async (orderId: string, targetStatus: OrderStatus) => {
-        const order =
-            orderHistory.find((o) => o.id === orderId) ||
-            (lastOrder?.id === orderId ? lastOrder : null);
-        if (!order) return;
-
+    // Thanh toán lại không phải là chuyển PENDING -> PENDING.
+    // Tải trạng thái server trước, chặn thử lại nếu VNPay chưa xác nhận kết quả.
+    const xuLyThuLaiTuLichSu = async (orderId: string, method: 'VNPAY' | 'WALLET' | 'CARD') => {
+        setStatusNotice(null);
         try {
-            assertTransition(order.status, targetStatus);
-        } catch {
-            return;
-        }
-
-        if (targetStatus === 'PENDING') {
-            // Không cập nhật trạng thái local trước khi nhận xác nhận từ backend.
-            const idempotencyKey = getPaymentKey(orderId, 'WALLET', false);
-            const payload: Payment = {
-                id: 'pay_' + Date.now().toString(36),
-                orderId,
-                idempotencyKey,
-                amount: order.total,
-                method: 'WALLET',
-            };
-
-            try {
-                const res = await api.processPayment(payload, 'PAID');
-                if (res.status === 'PAID') {
-                    capNhatLichSuDon((prev) =>
-                        prev.map((o) => (o.id === orderId ? { ...o, status: 'PAID' } : o))
-                    );
-                    if (lastOrder?.id === orderId) {
-                        setLastOrder({ ...lastOrder, status: 'PAID' });
-                    }
-                    if (currentPendingOrderId === orderId) {
-                        clearCart();
-                        setCurrentPendingOrderId(null);
-                        setCheckoutStatus(null);
-                        setSimulatePaymentError(false);
-                    }
-                    // Số dư điểm và tồn kho sẽ được tải lại từ máy chủ.
-                    await taiDanhSachMon();
-                    api.getMe().then(me => {setUser(me); setStoredUser(me);}).catch(() => {});
-                    setStatusNotice({
-                        type: 'success',
-                        message: `Đơn hàng #${orderId} đã được thanh toán thành công.`,
-                        orderId,
-                    });
-                } else {
-                    capNhatLichSuDon((prev) =>
-                        prev.map((o) => (o.id === orderId ? { ...o, status: 'PAYMENT_FAILED' } : o))
-                    );
-                    if (lastOrder?.id === orderId) {
-                        setLastOrder({ ...lastOrder, status: 'PAYMENT_FAILED' });
-                    }
-                    setStatusNotice({
-                        type: 'error',
-                        message: `Thanh toán lại cho đơn hàng #${orderId} không thành công.`,
-                        orderId,
-                    });
+            const fresh = await api.getMyOrders();
+            setOrderHistory(fresh);
+            const order = fresh.find(o => o.id === orderId);
+            if (!order || !['PENDING', 'PAYMENT_FAILED'].includes(order.status)) {
+                throw new Error('Đơn không còn chờ thanh toán. Vui lòng tải lại lịch sử.');
+            }
+            // Ngăn nhân viên/khách tạo thanh toán mới khi IPN còn treo hoặc đã nhận tiền.
+            const gateway = await api.getVnpayStatus(orderId);
+            if (gateway.requiresReconciliation || gateway.payment?.status === 'SUCCESS') {
+                throw new Error('VNPay đã ghi nhận thanh toán nhưng đơn cần đối soát. KHÔNG thanh toán lại.');
+            }
+            if (gateway.payment?.status === 'PENDING') {
+                throw new Error('VNPay vẫn đang chờ kết quả. KHÔNG thanh toán lại trước khi đối soát.');
+            }
+            if (order.total === 0) {
+                await api.completeZeroTotalOrder(orderId);
+            } else if (method === 'VNPAY') {
+                if (gateway.payment?.status === 'FAILED') resetPaymentKey(orderId, 'VNPAY', false);
+                const idempotencyKey = getPaymentKey(orderId, 'VNPAY', false);
+                const payment = await api.createVnpayPayment(orderId, idempotencyKey);
+                sessionStorage.setItem('brewlite_vnpay_order', orderId);
+                window.location.assign(payment.paymentUrl);
+                return;
+            } else {
+                if (process.env.NEXT_PUBLIC_ENABLE_DEMO_PAYMENTS !== 'true') {
+                    throw new Error('Thanh toán ví/thẻ mô phỏng đã tắt');
                 }
-            } catch {
-                // Lỗi HTTP không chứng minh thanh toán thất bại. Đồng bộ từ DB.
-                try {
-                    const fresh = await api.getMyOrders();
-                    setOrderHistory(fresh);
-                    const latest = fresh.find(o => o.id === orderId);
-                    if (latest && lastOrder?.id === orderId) setLastOrder(latest);
-                } catch {}
-                setStatusNotice({
-                    type: 'error',
-                    message: `Chưa xác nhận kết quả thanh toán đơn #${orderId}. Kiểm tra lại lịch sử trước khi thử tiếp.`,
-                    orderId,
-                });
+                const payload: Payment = {
+                    id: crypto.randomUUID(), orderId, method,
+                    amount: order.total, idempotencyKey: getPaymentKey(orderId, method, false),
+                    simulateFailure: false,
+                };
+                await api.processPayment(payload, 'PAID');
             }
-        } else {
-            if (targetStatus !== 'CANCELLED') return;
-            try { await api.transitionOrderStatus(orderId, targetStatus); } catch (error: any) {
-                setStatusNotice({type:'error', message:error.message || 'Không thể hủy đơn', orderId}); return;
+            const updated = await api.getMyOrders();
+            setOrderHistory(updated);
+            const latest = updated.find(o => o.id === orderId);
+            if (latest?.status !== 'PAID' && latest?.status !== 'PREPARING' &&
+                latest?.status !== 'READY' && latest?.status !== 'COMPLETED') {
+                throw new Error('Chưa xác nhận được đơn đã thanh toán. Hãy xem trạng thái từ hệ thống.');
             }
-            // Hoàn tiền, hoàn điểm, hoàn kho thực hiện ở backend trong transaction.
-            await taiDanhSachMon();
-            api.getMe().then(me => {setUser(me); setStoredUser(me);}).catch(() => {});
-            capNhatLichSuDon((prev) =>
-                prev.map((o) => (o.id === orderId ? { ...o, status: targetStatus } : o))
-            );
-            if (lastOrder?.id === orderId) {
-                setLastOrder({ ...lastOrder, status: targetStatus });
+            if (lastOrder?.id === orderId) setLastOrder(latest);
+            if (currentPendingOrderId === orderId) {
+                clearCart();
+                setCurrentPendingOrderId(null);
+                setCheckoutStatus(null);
+                sessionStorage.removeItem('brewlite_create_key');
             }
             queryClient.invalidateQueries({ queryKey: QUERY_KEYS.lichSuDon });
+            api.getMe().then(me => {setUser(me); setStoredUser(me);}).catch(() => {});
+            setStatusNotice({ type: 'success', orderId,
+                message: `Đơn #${latest.orderCode ?? orderId} đã thanh toán thành công.` });
+        } catch (error: any) {
+            // Lỗi mạng không chứng minh thanh toán thất bại: không tự cập nhật PAYMENT_FAILED.
+            setStatusNotice({ type: 'error', orderId,
+                message: error?.message || 'Chưa xác nhận kết quả. Vui lòng kiểm tra lịch sử đơn.' });
+            try { setOrderHistory(await api.getMyOrders()); } catch {}
+        }
+    };
 
-            // Nhánh này chỉ xử lý hủy đơn; các trạng thái pha chế do STAFF cập nhật ở backend.
-            setStatusNotice({
-                type: 'success',
-                message: `Đơn hàng #${orderId} đã được hủy thành công.`,
-                orderId,
-            });
+    const xuLyChuyenTrangThaiDon = async (orderId: string, targetStatus: OrderStatus) => {
+        if (targetStatus !== 'CANCELLED') return;
+        const order = orderHistory.find(o => o.id === orderId) ||
+            (lastOrder?.id === orderId ? lastOrder : null);
+        if (!order) return;
+        try { assertTransition(order.status, targetStatus); }
+        catch { return; }
+        try {
+            await api.transitionOrderStatus(orderId, targetStatus);
+            await taiDanhSachMon();
+            api.getMe().then(me => {setUser(me); setStoredUser(me);}).catch(() => {});
+            capNhatLichSuDon(prev => prev.map(o => o.id === orderId ? { ...o, status: targetStatus } : o));
+            if (lastOrder?.id === orderId) setLastOrder({ ...lastOrder, status: targetStatus });
+            queryClient.invalidateQueries({ queryKey: QUERY_KEYS.lichSuDon });
+            setStatusNotice({ type: 'success', orderId,
+                message: `Đơn #${order.orderCode ?? orderId} đã hủy thành công.` });
+        } catch (error: any) {
+            setStatusNotice({ type: 'error', orderId,
+                message: error?.message || 'Không thể hủy đơn' });
         }
     };
 
@@ -1042,12 +1048,6 @@ function UngDungDatNuoc() {
                         setPaymentMethod={setPaymentMethod}
                         walletType={walletType}
                         setWalletType={setWalletType}
-                        cardNumber={cardNumber}
-                        cardExpiry={cardExpiry}
-                        cardCvv={cardCvv}
-                        onCardNumberChange={xuLyNhapSoThe}
-                        onExpiryChange={xuLyNhapHanThe}
-                        onCvvChange={xuLyNhapCvv}
                         onBackToCart={() => {
                             if (currentPendingOrderId) void xuLyHuyDonDangThanhToan();
                             else setManHinhHienTai('cart');
@@ -1087,10 +1087,7 @@ function UngDungDatNuoc() {
                             setManHinhHienTai('menu');
                         }}
                         onTransition={xuLyChuyenTrangThaiDon}
-                        onRetryFromHistory={(orderId) => {
-                            setStatusNotice(null);
-                            xuLyChuyenTrangThaiDon(orderId, 'PENDING');
-                        }}
+                        onRetryFromHistory={(orderId, method) => void xuLyThuLaiTuLichSu(orderId, method)}
                         statusNotice={statusNotice}
                         onClearNotice={() => setStatusNotice(null)}
                     />

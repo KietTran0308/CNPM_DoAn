@@ -179,7 +179,6 @@ export interface Product {
 
 }
 
-// Chi cho chon nhung size co gia trong product_size_prices.
 export function laySizeKhaDung(product: Product): SizeType[] {
     return (['S', 'M', 'L'] as SizeType[]).filter((size) => {
         const price = product.sizePrices?.[size];
@@ -607,10 +606,7 @@ export function mapProduct(raw: any, fallbackId = 1): Product {
             .map((size) => sizePrices[size])
             .find((value) => value > 0) ?? 0;
     }
-    if (!price) {
-        const defaultMatched = DEFAULT_PRODUCTS.find((p) => p.code === code || p.id === String(raw.id));
-        if (defaultMatched) price = defaultMatched.price;
-    }
+    // Không dùng giá hardcode khi DB không trả giá size: để 0 và khóa chọn size.
 
     // products.stock không tồn tại trong database (tồn kho theo NGUYÊN LIỆU).
     // Khi API không trả stock, giới hạn số lượng phải do API thanh toán xác thực.
@@ -846,6 +842,30 @@ function authHeaders(key?: string): Record<string, string> {
     return {Authorization: `Bearer ${token}`, ...(key ? {'Idempotency-Key': key} : {})};
 }
 
+export interface StaffOrder {
+    id: string;
+    orderCode: number;
+    status: OrderStatus;
+    total: number;
+    orderItems: Array<{ quantity: number; product: { name: string } }>;
+}
+export interface StockIngredient {
+    id: string;
+    code: string;
+    name: string;
+    unit: string;
+    stockQuantity: number;
+    minStockQuantity: number;
+}
+export interface ReconciliationPayment {
+    id: string;
+    orderId: string;
+    providerRef: string | null;
+    amount: number;
+    status: 'PENDING' | 'SUCCESS' | 'FAILED';
+    order: { orderCode: number; status: OrderStatus; total: number };
+}
+
 export const api = {
     async getProducts(): Promise<Product[]> {
         const list = await request<any[]>('/products');
@@ -902,6 +922,28 @@ export const api = {
         return {orderId: String(data.id), orderCode:data.orderCode,
             status:data.status, total:Number(data.total)};
     },
+    async completeZeroTotalOrder(orderId: string): Promise<{
+        status: OrderStatus; total: number; earnedPoints: number; isDuplicate: boolean;
+    }> {
+        const data = await request<any>('/payments/zero', {
+            method: 'POST', headers: authHeaders(), body: JSON.stringify({ orderId }),
+        });
+        return { status: data.status, total: Number(data.total),
+            earnedPoints: Number(data.earnedPoints || 0), isDuplicate: !!data.replay };
+    },
+    async createVnpayPayment(orderId: string, idempotencyKey: string):
+        Promise<{paymentId: string; orderId: string; status: string; paymentUrl: string}> {
+        return request('/payments/vnpay', {
+            method: 'POST', headers: authHeaders(idempotencyKey),
+            body: JSON.stringify({orderId}),
+        });
+    },
+    async getVnpayStatus(orderId: string):
+        Promise<{orderId: string; orderStatus: OrderStatus; requiresReconciliation?: boolean;
+            awaitingGateway?: boolean; payment: {status: string} | null}> {
+        return request(`/payments/vnpay/status?orderId=${encodeURIComponent(orderId)}`,
+            {headers: authHeaders()});
+    },
     async processPayment(payment: Payment, result?: OrderStatus):
         Promise<{status: OrderStatus; isDuplicate?: boolean; earnedPoints?: number; total?: number}> {
         const data = await request<any>('/payments', {
@@ -914,6 +956,32 @@ export const api = {
         });
         return {status:data.order.status, isDuplicate:!!data.replay,
             earnedPoints:Number(data.earnedPoints || 0), total:Number(data.order.total)};
+    },
+    async getStaffQueue(): Promise<StaffOrder[]> {
+        return request('/orders/queue', { headers: authHeaders() });
+    },
+    async updateStaffOrder(id: string, status: 'PREPARING' | 'READY' | 'COMPLETED') {
+        return request(`/orders/${encodeURIComponent(id)}/status`, {
+            method: 'PATCH', headers: authHeaders(), body: JSON.stringify({ status }),
+        });
+    },
+    async getInventory(): Promise<StockIngredient[]> {
+        const result = await request<any[]>('/products/inventory', { headers: authHeaders() });
+        return result.map(row => ({ ...row, stockQuantity: Number(row.stockQty),
+            minStockQuantity: Number(row.minStockQty) }));
+    },
+    async restockIngredient(ingredientId: string, quantity: number, note?: string) {
+        return request('/products/inventory/restock', { method: 'POST',
+            headers: authHeaders(), body: JSON.stringify({ ingredientId, quantity, note }),
+        });
+    },
+    async recheckVnpay(orderId: string): Promise<{message: string; requiresReconciliation?: boolean}> {
+        return request(`/payments/vnpay/recheck/${encodeURIComponent(orderId)}`, {
+            method: 'POST', headers: authHeaders(),
+        });
+    },
+    async getReconciliationQueue(): Promise<ReconciliationPayment[]> {
+        return request('/payments/vnpay/reconciliation', { headers: authHeaders() });
     },
     async getMyOrders(): Promise<Order[]> {
         const list = await request<any[]>('/orders/me', {headers:authHeaders()});
