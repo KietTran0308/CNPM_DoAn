@@ -37,6 +37,7 @@ Cách đơn giản nhất là chạy bằng Docker. Cần cài:
 Nếu chạy không dùng Docker, cần cài thêm Node.js 22, npm và PostgreSQL 16.
 
 Tải hoặc clone source code về máy, sau đó mở PowerShell trong thư mục BrewLite, nơi có file docker-compose.yml.
+
 3. Chạy dự án bằng Docker (khuyên dùng)
 Bước 1: Tạo file môi trường
 Tại thư mục gốc BrewLite, chạy:

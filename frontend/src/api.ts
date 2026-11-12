@@ -200,6 +200,8 @@ export interface User {
 }
 
 export interface Order {
+    paidWithZalopay?: boolean;
+    pendingZalopay?: boolean;
     id: string;
     orderCode?: number;
     userId: string;
@@ -574,7 +576,7 @@ export const DEFAULT_PRODUCTS: Product[] = [
 ];
 
 export function mapProduct(raw: any, fallbackId = 1): Product {
-    if (!raw) return DEFAULT_PRODUCTS[0];
+    if (!raw || typeof raw !== 'object') throw new Error("Sản phẩm trả về từ máy chủ không hợp lệ");
     const code = raw.code || raw.product_code || `BL00${fallbackId}`;
     const imageKey = raw.imageKey || raw.image_key;
     let imageUrl = raw.imageUrl || raw.image_url;
@@ -623,7 +625,8 @@ export function mapProduct(raw: any, fallbackId = 1): Product {
                 ? Boolean(raw.is_active)
                 : true;
 
-    const id = String(raw.id || raw.uuid || DEFAULT_PRODUCTS.find(p => p.code === code)?.id || '');
+    const id = String(raw.id || raw.uuid || '');
+    if (!id) throw new Error('Sản phẩm thiếu mã định danh từ máy chủ');
 
     return {
         id,
@@ -645,9 +648,9 @@ export function mapProduct(raw: any, fallbackId = 1): Product {
 }
 
 export function mapUser(raw: any): User {
-    if (!raw) throw new Error("Máy chủ không trả về thông tin tài khoản");
+    if (!raw || typeof raw !== 'object' || !(raw.id || raw.user_id)) throw new Error("Máy chủ không trả về thông tin tài khoản hợp lệ");
     return {
-        id: String(raw.id || raw.user_id || 'usr_' + Date.now().toString(36)),
+        id: String(raw.id || raw.user_id || ''),
         email: String(raw.email || '').trim().toLowerCase(),
         // Không trả/lưu hash mật khẩu vào browser.
         passwordHash: undefined,
@@ -683,22 +686,22 @@ export function mapOrderItem(raw: any): OrderItem {
 }
 
 export function mapOrder(raw: any): Order {
-    if (!raw) {
-        return {
-            id: '1001',
-            userId: 'usr_me',
-            status: 'PENDING',
-            total: 0,
-            createdAt: new Date().toISOString(),
-        };
+    if (!raw || typeof raw !== 'object' || !(raw.id || raw.order_id)) {
+        throw new Error('Máy chủ trả về đơn hàng không hợp lệ');
     }
-    const id = String(raw.id || raw.order_id || raw.orderCode || raw.order_code || '1001');
+    const id = String(raw.id || raw.order_id);
     const items = Array.isArray(raw.orderItems || raw.items || raw.order_items)
         ? (raw.orderItems || raw.items || raw.order_items).map(mapOrderItem)
         : undefined;
 
     return {
         id,
+        paidWithZalopay: Array.isArray(raw.payments) && raw.payments.some(
+            (payment: any) => ['ZALOPAY', 'VNPAY'].includes(payment.method) && payment.status === 'SUCCESS',
+        ),
+        pendingZalopay: Array.isArray(raw.payments) && raw.payments.some(
+            (payment: any) => ['ZALOPAY', 'VNPAY'].includes(payment.method) && payment.status === 'PENDING',
+        ),
         orderCode: raw.orderCode || raw.order_code ? Number(raw.orderCode || raw.order_code) : undefined,
         userId: String(raw.userId || raw.user_id || 'usr_me'),
         couponId: raw.couponId || raw.coupon_id || undefined,
@@ -847,7 +850,7 @@ export interface StaffOrder {
     orderCode: number;
     status: OrderStatus;
     total: number;
-    orderItems: Array<{ quantity: number; product: { name: string } }>;
+    orderItems: Array<{ qty: number; product: { name: string } }>;
 }
 export interface StockIngredient {
     id: string;
@@ -858,6 +861,7 @@ export interface StockIngredient {
     minStockQuantity: number;
 }
 export interface ReconciliationPayment {
+    method: 'ZALOPAY' | 'VNPAY';
     id: string;
     orderId: string;
     providerRef: string | null;
@@ -910,7 +914,9 @@ export const api = {
             })),
             couponCode: couponCode || undefined, pointsToUse,
         };
-        const fingerprint = JSON.stringify(dto);
+        // Idempotency là phạm vi của từng tài khoản, không dùng lại key khi đổi user.
+        const accountId = getStoredUser()?.id || 'unknown';
+        const fingerprint = JSON.stringify({ accountId, dto });
         let previous: { fingerprint: string; key: string } | null = null;
         try { previous = JSON.parse(sessionStorage.getItem('brewlite_create_key') || 'null'); } catch {}
         const key = previous?.fingerprint === fingerprint ? previous.key : crypto.randomUUID();
@@ -931,17 +937,17 @@ export const api = {
         return { status: data.status, total: Number(data.total),
             earnedPoints: Number(data.earnedPoints || 0), isDuplicate: !!data.replay };
     },
-    async createVnpayPayment(orderId: string, idempotencyKey: string):
+    async createZalopayPayment(orderId: string, idempotencyKey: string):
         Promise<{paymentId: string; orderId: string; status: string; paymentUrl: string}> {
-        return request('/payments/vnpay', {
+        return request('/payments/zalopay', {
             method: 'POST', headers: authHeaders(idempotencyKey),
             body: JSON.stringify({orderId}),
         });
     },
-    async getVnpayStatus(orderId: string):
+    async getZalopayStatus(orderId: string):
         Promise<{orderId: string; orderStatus: OrderStatus; requiresReconciliation?: boolean;
-            awaitingGateway?: boolean; payment: {status: string} | null}> {
-        return request(`/payments/vnpay/status?orderId=${encodeURIComponent(orderId)}`,
+            awaitingGateway?: boolean; payment: {status: string; method: string; paymentUrl?: string | null} | null}> {
+        return request(`/payments/zalopay/status?orderId=${encodeURIComponent(orderId)}`,
             {headers: authHeaders()});
     },
     async processPayment(payment: Payment, result?: OrderStatus):
@@ -975,13 +981,13 @@ export const api = {
             headers: authHeaders(), body: JSON.stringify({ ingredientId, quantity, note }),
         });
     },
-    async recheckVnpay(orderId: string): Promise<{message: string; requiresReconciliation?: boolean}> {
-        return request(`/payments/vnpay/recheck/${encodeURIComponent(orderId)}`, {
+    async recheckZalopay(orderId: string): Promise<{message: string; requiresReconciliation?: boolean}> {
+        return request(`/payments/zalopay/recheck/${encodeURIComponent(orderId)}`, {
             method: 'POST', headers: authHeaders(),
         });
     },
     async getReconciliationQueue(): Promise<ReconciliationPayment[]> {
-        return request('/payments/vnpay/reconciliation', { headers: authHeaders() });
+        return request('/payments/zalopay/reconciliation', { headers: authHeaders() });
     },
     async getMyOrders(): Promise<Order[]> {
         const list = await request<any[]>('/orders/me', {headers:authHeaders()});

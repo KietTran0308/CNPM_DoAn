@@ -36,7 +36,7 @@ describe('BrewLite API E2E', () => {
         await request(app.getHttpServer())
             .get('/health')
             .expect(200)
-            .expect({ status: 'ok' });
+            .expect({ status: 'ok', database: 'ok' });
     });
 
     it('GET /products trả về danh sách', async () => {

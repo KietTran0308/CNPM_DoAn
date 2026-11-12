@@ -13,6 +13,14 @@ async function request(path, method='GET', payload, token, key) {
   return data;
 }
 try {
+  // Bài test tạo dữ liệu thật: chỉ chạy local với backend đã bật demo và DB TEST.
+  const host = new URL(root).hostname;
+  if (!['localhost', '127.0.0.1', '::1'].includes(host)) {
+    throw new Error('E2E chỉ được phép chạy localhost để tránh sửa dữ liệu Render');
+  }
+  if (process.env.ENABLE_DEMO_PAYMENTS !== 'true') {
+    throw new Error('E2E yêu cầu ENABLE_DEMO_PAYMENTS=true ở cả backend TEST và tiến trình chạy script');
+  }
   const menu = await request('/products');
   if (!menu.length || !menu[0].sizePrices.some(p => p.size==='M')) throw new Error('Menu/giá sai');
   const name = 'E2E BrewLite';

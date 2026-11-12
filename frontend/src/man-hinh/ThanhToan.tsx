@@ -30,8 +30,8 @@ interface ThanhToanProps {
     setSimulatePaymentError: (val: boolean) => void;
     paymentMethod: 'wallet' | 'bank';
     setPaymentMethod: (method: 'wallet' | 'bank') => void;
-    walletType: 'MoMo' | 'VNPay';
-    setWalletType: (type: 'MoMo' | 'VNPay') => void;
+    walletType: 'MoMo' | 'ZaloPay';
+    setWalletType: (type: 'MoMo' | 'ZaloPay') => void;
     onBackToCart: () => void;
     onRetryPayment: () => void;
     onCancelCurrentOrder: () => void;
@@ -149,7 +149,7 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                             onClick={() => setPaymentMethod('wallet')}
                         >
                             <div className="flex items-center justify-between text-xs sm:text-sm font-semibold text-[#124E35]">
-                                <span>Ví điện tử (MoMo mô phỏng / VNPay Sandbox)</span>
+                                <span>{DEMO_PAYMENTS ? 'Ví điện tử (MoMo mô phỏng / ZaloPay Sandbox)' : 'Thanh toán trực tuyến qua ZaloPay Sandbox'}</span>
                                 <span
                                     className={`text-xs px-2.5 py-0.5 rounded border font-semibold ${
                                         paymentMethod === 'wallet'
@@ -164,7 +164,7 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                             {paymentMethod === 'wallet' && (
                                 <div className="pt-3.5 mt-3.5 border-t border-[#E2D9C0] space-y-3.5">
                                     <div className="grid grid-cols-2 gap-2.5">
-                                        {(DEMO_PAYMENTS ? ['MoMo', 'VNPay'] as const : ['VNPay'] as const).map((type) => (
+                                        {(DEMO_PAYMENTS ? ['MoMo', 'ZaloPay'] as const : ['ZaloPay'] as const).map((type) => (
                                             <button
                                                 key={type}
                                                 type="button"
@@ -183,9 +183,9 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                                         ))}
                                     </div>
 
-                                    {walletType === 'VNPay' ? (
+                                    {walletType === 'ZaloPay' ? (
                                         <div className="rounded-lg border border-[#D5CCB4] bg-[#FBF9F5] p-4 text-xs text-neutral-700">
-                                            Bạn sẽ được chuyển tới trang thanh toán VNPay Sandbox qua kết nối HTTPS.
+                                            Bạn sẽ được chuyển tới trang thanh toán ZaloPay Sandbox qua kết nối HTTPS.
                                             Không sử dụng mã QR minh họa làm mã thanh toán thật.
                                         </div>
                                     ) : <div className="pt-1 text-center space-y-2">
@@ -497,7 +497,7 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                         </div>
                     )}
 
-                    {DEMO_PAYMENTS && finalPayable > 0 && !(paymentMethod === 'wallet' && walletType === 'VNPay') && <label className="flex items-center gap-2 text-xs text-neutral-500 cursor-pointer select-none pt-1">
+                    {DEMO_PAYMENTS && finalPayable > 0 && !(paymentMethod === 'wallet' && walletType === 'ZaloPay') && <label className="flex items-center gap-2 text-xs text-neutral-500 cursor-pointer select-none pt-1">
                         <input
                             type="checkbox"
                             checked={simulatePaymentError}
@@ -507,8 +507,8 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                         <span>Mô phỏng lỗi giao dịch</span>
                     </label>}
                     {DEMO_PAYMENTS && <p className="text-xs text-amber-700">Ví MoMo và thẻ ngân hàng chỉ mô phỏng, không ghi nhận tiền thật.</p>}
-                    {finalPayable > 0 && paymentMethod === 'wallet' && walletType === 'VNPay' &&
-                        <p className="text-xs text-neutral-600">Bạn sẽ chuyển tới VNPay Sandbox. Đơn chỉ thành công khi hệ thống nhận IPN xác nhận.</p>}
+                    {finalPayable > 0 && paymentMethod === 'wallet' && walletType === 'ZaloPay' &&
+                        <p className="text-xs text-neutral-600">Bạn sẽ chuyển tới ZaloPay Sandbox. Đơn chỉ thành công khi hệ thống nhận callback xác nhận.</p>}
 
                     <button
                         type="button"

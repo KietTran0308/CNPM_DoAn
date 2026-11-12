@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { OrdersService, PricingService } from './orders.service';
 import { PaymentsService } from '../payments/payments.service';
-import { VnpayService } from '../payments/vnpay.service';
+import { ZalopayService } from '../payments/zalopay.service';
 import { PrismaService } from '../prisma.service';
 
 // Chay voi PostgreSQL rieng: TEST_DATABASE_URL phai tro den database brewlite_test.
@@ -16,8 +16,11 @@ integration('Hai don thanh toan dong thoi - ton kho', () => {
     let productId: string;
     let ingredientId: string;
     const orderIds: string[] = [];
+    const previousDemoFlag = process.env.ENABLE_DEMO_PAYMENTS;
 
     beforeAll(async () => {
+        // Chi bat demo trong test tren DB test, khong tac dong Render.
+        process.env.ENABLE_DEMO_PAYMENTS = 'true';
         const dbName = new URL(testDatabaseUrl!).pathname.slice(1);
         if (dbName !== 'brewlite_test') {
             throw new Error('Chi duoc test tren database ten brewlite_test');
@@ -89,6 +92,8 @@ integration('Hai don thanh toan dong thoi - ton kho', () => {
     });
 
     afterAll(async () => {
+        if (previousDemoFlag === undefined) delete process.env.ENABLE_DEMO_PAYMENTS;
+        else process.env.ENABLE_DEMO_PAYMENTS = previousDemoFlag;
         if (!prisma) return;
         try {
             if (orderIds.length) {
@@ -115,7 +120,7 @@ integration('Hai don thanh toan dong thoi - ton kho', () => {
 
     it('chi 1 don PAID khi kho chi du 1 ly', async () => {
         const ordersService = new OrdersService(prisma as PrismaService, new PricingService());
-        const paymentsService = new PaymentsService(prisma as PrismaService, {} as VnpayService, ordersService);
+        const paymentsService = new PaymentsService(prisma as PrismaService, {} as ZalopayService, ordersService);
 
         const results = await Promise.allSettled(orderIds.map((orderId, index) =>
             paymentsService.pay(userIds[index], `stock-test-${index}-${randomUUID()}`, {

@@ -1,7 +1,7 @@
 import { BadRequestException, ConflictException } from "@nestjs/common";
 import { PrismaService } from "../prisma.service";
 import { PaymentsService } from "./payments.service";
-import { VnpayService } from "./vnpay.service";
+import { ZalopayService } from "./zalopay.service";
 import { describe, it, expect, jest, beforeEach } from "@jest/globals";
 
 const USER_ID = "0abd345f-7157-5376-bdf7-d23459d5c505";
@@ -14,20 +14,23 @@ const DTO = {
   simulateFailure: false,
 };
 
-// Mock VNPay: không gọi API VNPay thật trong unit test.
-const mockVnpayService = {
-  createPaymentUrl: jest.fn(),
-  verifySignature: jest.fn(),
+// Mock ZaloPay: không gọi API ZaloPay thật trong unit test.
+const mockZalopayService = {
+  assertConfigured: jest.fn(),
+  createTransactionId: jest.fn(),
+  createOrder: jest.fn(),
+  verifyCallback: jest.fn(),
+  queryOrder: jest.fn(),
 };
 
 // Unit tests: idempotency replay không cần PostgreSQL thật.
 describe("PaymentsService - idempotency", () => {
-  let vnpayService: VnpayService;
+  let zalopayService: ZalopayService;
 
   beforeEach(() => {
     jest.clearAllMocks();
     process.env.ENABLE_DEMO_PAYMENTS = 'true';
-    vnpayService = mockVnpayService as unknown as VnpayService;
+    zalopayService = mockZalopayService as unknown as ZalopayService;
   });
 
   it("tra ve giao dich da luu khi cung key va dung request", async () => {
@@ -55,7 +58,7 @@ describe("PaymentsService - idempotency", () => {
       $transaction: transaction,
     } as unknown as PrismaService;
 
-    const result = await new PaymentsService(prisma, vnpayService, {} as any).pay(
+    const result = await new PaymentsService(prisma, zalopayService, {} as any).pay(
       USER_ID,
       "payment-key-123",
       DTO,
@@ -88,7 +91,7 @@ describe("PaymentsService - idempotency", () => {
     } as unknown as PrismaService;
 
     await expect(
-      new PaymentsService(prisma, vnpayService, {} as any).pay(
+      new PaymentsService(prisma, zalopayService, {} as any).pay(
         USER_ID,
         "payment-key-123",
         DTO,
@@ -118,7 +121,7 @@ describe("PaymentsService - idempotency", () => {
     } as unknown as PrismaService;
 
     await expect(
-      new PaymentsService(prisma, vnpayService, {} as any).pay(
+      new PaymentsService(prisma, zalopayService, {} as any).pay(
         USER_ID,
         "payment-key-123",
         DTO,
@@ -147,7 +150,7 @@ describe("PaymentsService - idempotency", () => {
       },
     } as unknown as PrismaService;
 
-    const result = await new PaymentsService(prisma, vnpayService, {} as any).pay(
+    const result = await new PaymentsService(prisma, zalopayService, {} as any).pay(
       USER_ID,
       "payment-key-456",
       {
@@ -161,7 +164,7 @@ describe("PaymentsService - idempotency", () => {
   });
 
   it("tu choi idempotency key ngan hon 8 ky tu", async () => {
-    const service = new PaymentsService({} as PrismaService, vnpayService, {} as any);
+    const service = new PaymentsService({} as PrismaService, zalopayService, {} as any);
 
     await expect(service.pay(USER_ID, "short", DTO)).rejects.toThrow(
       BadRequestException,

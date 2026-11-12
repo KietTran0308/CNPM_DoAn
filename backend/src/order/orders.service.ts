@@ -19,6 +19,9 @@ export function normalizeToppingSelections(item: OrderItemDto): Array<{
     toppingId: string;
     servings: number;
 }> {
+    if ((item.toppings?.length ?? 0) > 10 || (item.toppingIds?.length ?? 0) > 10) {
+        throw new BadRequestException("Mỗi món tối đa 10 loại topping");
+    }
     if (item.toppings !== undefined && item.toppingIds !== undefined) {
         throw new BadRequestException("Chỉ gửi toppings hoặc toppingIds, không gửi cả hai");
     }
@@ -37,8 +40,8 @@ export function normalizeToppingSelections(item: OrderItemDto): Array<{
         if (!selection || typeof selection.toppingId !== "string" || !selection.toppingId.trim()) {
             throw new BadRequestException("Mã topping không hợp lệ");
         }
-        if (!Number.isInteger(selection.servings) || selection.servings < 1 || selection.servings > 100) {
-            throw new BadRequestException("Số suất topping phải từ 1 đến 100");
+        if (!Number.isInteger(selection.servings) || selection.servings < 1 || selection.servings > 10) {
+            throw new BadRequestException("Số suất topping phải từ 1 đến 10");
         }
     }
     const ids = selections.map((s) => s.toppingId);
@@ -55,7 +58,7 @@ export function normalizeToppingSelections(item: OrderItemDto): Array<{
 @Injectable()
 export class PricingService {
     async calculateItem(tx: Prisma.TransactionClient, item: OrderItemDto) {
-        if (!Number.isInteger(item.qty) || item.qty < 1 || item.qty > 2147483647) {
+        if (!Number.isInteger(item.qty) || item.qty < 1 || item.qty > 100) {
             throw new BadRequestException("Số lượng phải lớn hơn 0");
         }
 
@@ -115,6 +118,7 @@ export class PricingService {
             !Number.isSafeInteger(basePrice) ||
             !Number.isSafeInteger(unitPrice) ||
             !Number.isSafeInteger(lineTotal) ||
+            lineTotal > 9_999_999_999 ||
             basePrice < 0
         ) {
             throw new BadRequestException("Giá sản phẩm không hợp lệ");
@@ -174,8 +178,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                 expiresAt: {
                     lte: new Date(),
                 },
-                // Đơn còn phiên VNPay PENDING phải đối soát trước khi cho phép hủy.
-                payments: { none: { method: 'VNPAY', status: { in: ['PENDING', 'SUCCESS'] } } },
+                // Đơn còn phiên ZaloPay hoặc giao dịch cũ PENDING phải đối soát trước khi cho phép hủy.
+                payments: { none: { method: { in: ['ZALOPAY', 'VNPAY'] }, status: { in: ['PENDING', 'SUCCESS'] } } },
             },
             select: {
                 id: true,
@@ -210,6 +214,9 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
         if (!dto.items?.length) {
             throw new BadRequestException("Đơn hàng phải có ít nhất một sản phẩm");
+        }
+        if (dto.items.length > 50) {
+            throw new BadRequestException("Một đơn hàng không được vượt quá 50 dòng sản phẩm");
         }
 
         // Chuẩn hóa dữ liệu để tạo request hash.
@@ -288,7 +295,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                         });
                     }
 
-                    if (!Number.isSafeInteger(subtotal) || subtotal <= 0) {
+                    // PostgreSQL numeric(12,2) lưu tối đa 9.999.999.999,99 VND.
+                    if (!Number.isSafeInteger(subtotal) || subtotal <= 0 || subtotal > 9_999_999_999) {
                         throw new BadRequestException("Tổng tiền không hợp lệ");
                     }
 
@@ -591,6 +599,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                             orderId,
                             fromStatus: order.status,
                             toStatus: newStatus,
+                            changedBy: performedBy,
                         },
                     });
 
@@ -643,13 +652,13 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                     // Không cho phép hủy khi gateway chưa xác minh HOẶC gateway đã thu tiền.
                     // Kể cả order vẫn PENDING do thiếu kho/điểm cũng tuyệt đối không hủy âm thầm.
                     const gatewayPayment = await tx.payment.findFirst({ where: {
-                        orderId, method: 'VNPAY', status: { in: ['PENDING', 'SUCCESS'] },
+                        orderId, method: { in: ['ZALOPAY', 'VNPAY'] }, status: { in: ['PENDING', 'SUCCESS'] },
                     }});
                     if (gatewayPayment?.status === 'PENDING') {
-                        throw new ConflictException('VNPay chưa xác nhận; phải đối soát trước khi hủy');
+                        throw new ConflictException('ZaloPay hoặc giao dịch cũ chưa xác nhận; phải đối soát trước khi hủy');
                     }
                     if (gatewayPayment?.status === 'SUCCESS') {
-                        throw new ConflictException('VNPay đã thu tiền; cần xác minh và hoàn tiền thật trước khi hủy');
+                        throw new ConflictException('ZaloPay hoặc giao dịch cũ đã thu tiền; cần xác minh và hoàn tiền thật trước khi hủy');
                     }
                     assertTransition(order.status, OrderStatus.CANCELLED);
 
@@ -696,7 +705,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                         }
 
                         if (payment) {
-                            // Hoàn tiền MÔ PHỎNG (VNPay thành công đã bị chặn phía trên).
+                            // Hoàn tiền MÔ PHỎNG (ZaloPay hoặc giao dịch cũ thành công đã bị chặn phía trên).
                             await tx.payment.update({
                                 where: { id: payment.id },
                                 data: {

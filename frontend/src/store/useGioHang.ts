@@ -58,9 +58,15 @@ export const useGioHang = create<TrangThaiGioHang>()(
                             (line.note || '') === trimmedNote
                     );
 
+                    const productQty = state.cartLines
+                        .filter(line => line.item.productId === newLine.item.productId)
+                        .reduce((sum, line) => sum + line.item.qty, 0);
+                    const allowed = Math.max(0, Math.min(100, newLine.item.qty,
+                        newLine.stock - productQty));
+                    if (allowed === 0) return state;
                     if (existingIndex > -1) {
                         const updated = [...state.cartLines];
-                        const newQty = updated[existingIndex].item.qty + newLine.item.qty;
+                        const newQty = Math.min(100, updated[existingIndex].item.qty + allowed);
                         updated[existingIndex] = {
                             ...updated[existingIndex],
                             item: {
@@ -72,7 +78,10 @@ export const useGioHang = create<TrangThaiGioHang>()(
                         return { cartLines: updated };
                     }
 
-                    return { cartLines: [...state.cartLines, newLine] };
+                    return { cartLines: [...state.cartLines, {
+                        ...newLine, item: { ...newLine.item, qty: allowed,
+                            lineTotal: newLine.unitPrice * allowed },
+                    }] };
                 });
             },
 
@@ -91,6 +100,7 @@ export const useGioHang = create<TrangThaiGioHang>()(
                                     }
                                 }
                                 if (newQty <= 0) return null;
+                                if (newQty > 100) return line;
                                 return {
                                     ...line,
                                     item: {
@@ -123,6 +133,7 @@ export const useGioHang = create<TrangThaiGioHang>()(
                         },
                     };
 
+                    mergedLine.item.qty = Math.min(100, mergedLine.item.qty);
                     if (mergedLine.item.qty <= 0) {
                         return {
                             cartLines: state.cartLines.filter((l) => l.item.id !== itemId),
@@ -146,7 +157,7 @@ export const useGioHang = create<TrangThaiGioHang>()(
                     if (duplicateIdx > -1) {
                         const nextLines = [...state.cartLines];
                         const dupLine = nextLines[duplicateIdx];
-                        const combinedQty = Math.min(dupLine.stock, dupLine.item.qty + mergedLine.item.qty);
+                        const combinedQty = Math.min(100, dupLine.stock, dupLine.item.qty + mergedLine.item.qty);
                         nextLines[duplicateIdx] = {
                             ...dupLine,
                             item: {

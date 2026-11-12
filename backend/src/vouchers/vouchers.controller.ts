@@ -53,9 +53,11 @@ export class VouchersController {
             rewardId: v.rewardId,
             status: v.usedAt || v.coupon.usedCount >= v.coupon.maxUses
                 ? 'used'
-                : v.coupon.validTo <= now
+                : !v.coupon.isActive || v.coupon.validTo <= now
                     ? 'expired'
-                    : 'active',
+                    : v.coupon.validFrom > now
+                        ? 'upcoming'
+                        : 'active',
         }));
     }
 }

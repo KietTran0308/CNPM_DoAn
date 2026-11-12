@@ -5,6 +5,7 @@ export { Size as ProductSize };
 
 import {
     ArrayMinSize,
+    ArrayMaxSize,
     ArrayUnique,
     IsArray,
     IsEnum,
@@ -44,7 +45,7 @@ export class OrderToppingDto {
 
     @IsInt()
     @Min(1)
-    @Max(100)
+    @Max(10)
     servings!: number;
 }
 
@@ -55,17 +56,19 @@ export class OrderItemDto {
     @IsEnum(Size)
     size!: Size;
 
-    @IsInt() @Min(1) @Max(2147483647)
+    @IsInt() @Min(1) @Max(100)
     qty!: number;
 
     @ValidateIf((_obj, value) => value !== undefined)
     @IsArray()
+    @ArrayMaxSize(10)
     @ArrayUnique()
     @IsUUID("all", { each: true })
     toppingIds?: string[];
 
     @ValidateIf((_obj, value) => value !== undefined)
     @IsArray()
+    @ArrayMaxSize(10)
     @ArrayUnique((t: OrderToppingDto | null) => t?.toppingId)
     @ValidateNested({ each: true })
     @Type(() => OrderToppingDto)
@@ -88,6 +91,7 @@ export class OrderItemDto {
 export class CreateOrderDto {
     @IsArray()
     @ArrayMinSize(1)
+    @ArrayMaxSize(50)
     @ValidateNested({ each: true })
     @Type(() => OrderItemDto)
     items!: OrderItemDto[];

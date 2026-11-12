@@ -13,7 +13,7 @@ class RegisterDto {
 
 class LoginDto {
     @IsEmail() @MaxLength(255) email!: string;
-    @IsString() password!: string;
+    @IsString() @MaxLength(128) password!: string;
 }
 
 class UpdateProfileDto {
@@ -58,9 +58,13 @@ export class AuthController {
         return this.auth.register(d.fullName, d.email, d.password, d.phone);
     }
 
-    @Post('login') login(@Req() req: { ip?: string }, @Body() d: LoginDto) {
-        this.limit(req.ip || 'unknown', 'login');
-        return this.auth.login(d.email, d.password);
+    @Post('login') async login(@Req() req: { ip?: string }, @Body() d: LoginDto) {
+        const ip = req.ip || 'unknown';
+        this.limit(ip, 'login');
+        const result = await this.auth.login(d.email, d.password);
+        // Khong khoa nham nguoi dung dang nhap thanh cong nhieu lan.
+        this.attempts.delete(`login:${ip}`);
+        return result;
     }
 
     @UseGuards(JwtAuthGuard) @Get('me') me(@Req() req: { user: CurrentUser }) {

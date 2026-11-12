@@ -114,7 +114,7 @@ interface LichSuDonProps {
     products: Product[];
     onBackToMenu: () => void;
     onTransition: (orderId: string, targetStatus: OrderStatus) => void;
-    onRetryFromHistory: (orderId: string, method: 'VNPAY' | 'WALLET' | 'CARD') => void;
+    onRetryFromHistory: (orderId: string, method: 'ZALOPAY' | 'WALLET' | 'CARD') => void;
     statusNotice?: { type: 'success' | 'error' | 'ready'; message: string; orderId?: string } | null;
     onClearNotice?: () => void;
 }
@@ -130,7 +130,7 @@ export const LichSuDon: React.FC<LichSuDonProps> = ({
                                                         statusNotice,
                                                         onClearNotice,
                                                     }) => {
-    const [retryMethodByOrder, setRetryMethodByOrder] = useState<Record<string, 'VNPAY' | 'WALLET' | 'CARD'>>({});
+    const [retryMethodByOrder, setRetryMethodByOrder] = useState<Record<string, 'ZALOPAY' | 'WALLET' | 'CARD'>>({});
     const layTenTrangThai = (status: OrderStatus) => {
         switch (status) {
             case 'PENDING':
@@ -205,6 +205,8 @@ export const LichSuDon: React.FC<LichSuDonProps> = ({
                             const status = order.status;
                             const choPhepKhachThaoTac =
                                 status === 'PENDING' || status === 'PAYMENT_FAILED' || status === 'PAID';
+                            const coTheHuy = !order.pendingZalopay && !order.paidWithZalopay;
+                            const coTheThuLai = !order.pendingZalopay && !order.paidWithZalopay;
 
                             return (
                                 <div
@@ -290,31 +292,35 @@ export const LichSuDon: React.FC<LichSuDonProps> = ({
 
                                     {choPhepKhachThaoTac && (
                                         <div className="pt-2.5 border-t border-[#E2D9C0] flex flex-wrap gap-2 justify-end">
-                                            <button
+                                            {coTheHuy ? <button
                                                 type="button"
                                                 onClick={() => onTransition(order.id, 'CANCELLED')}
                                                 className="px-3.5 py-1.5 border border-[#D5CCB4] bg-[#EDE6D1] rounded-lg text-xs font-semibold text-[#124E35] cursor-pointer hover:bg-[#124E35] hover:text-[#F5F0E1] transition-colors"
                                             >
                                                 Hủy đơn
-                                            </button>
-                                            {(status === 'PENDING' || status === 'PAYMENT_FAILED') && (
+                                            </button> : <span className="text-xs text-amber-700 py-1.5">
+                                                {order.paidWithZalopay
+                                                    ? 'ZaloPay đã thu tiền: liên hệ cửa hàng để kiểm tra/hoàn tiền.'
+                                                    : 'ZaloPay đang chờ xác nhận: không hủy hoặc thanh toán lại.'}
+                                            </span>}
+                                            {coTheThuLai && (status === 'PENDING' || status === 'PAYMENT_FAILED') && (
                                                 <div className="flex flex-wrap items-center gap-2">
                                                     {order.total > 0 && (
                                                         <select
                                                             aria-label={`Phương thức thanh toán đơn ${order.orderCode ?? order.id}`}
-                                                            value={retryMethodByOrder[order.id] || 'VNPAY'}
+                                                            value={retryMethodByOrder[order.id] || 'ZALOPAY'}
                                                             onChange={e => setRetryMethodByOrder(prev => ({...prev,
-                                                                [order.id]: e.target.value as 'VNPAY' | 'WALLET' | 'CARD'}))}
+                                                                [order.id]: e.target.value as 'ZALOPAY' | 'WALLET' | 'CARD'}))}
                                                             className="px-2 py-1.5 border border-[#D5CCB4] rounded-lg text-xs bg-white text-[#124E35]"
                                                         >
-                                                            <option value="VNPAY">VNPay</option>
+                                                            <option value="ZALOPAY">ZaloPay</option>
                                                             {DEMO_PAYMENTS && <option value="WALLET">Ví mô phỏng</option>}
                                                             {DEMO_PAYMENTS && <option value="CARD">Thẻ mô phỏng</option>}
                                                         </select>
                                                     )}
                                                     <button
                                                         type="button"
-                                                        onClick={() => onRetryFromHistory(order.id, retryMethodByOrder[order.id] || 'VNPAY')}
+                                                        onClick={() => onRetryFromHistory(order.id, retryMethodByOrder[order.id] || 'ZALOPAY')}
                                                         className="px-3.5 py-1.5 bg-[#124E35] text-[#F5F0E1] rounded-lg text-xs font-semibold cursor-pointer hover:opacity-95 transition-colors"
                                                     >
                                                         {order.total === 0 ? 'Hoàn tất đơn 0đ' : 'Thử lại thanh toán'}

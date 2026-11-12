@@ -2,6 +2,7 @@ import {BadRequestException, Injectable, UnauthorizedException} from '@nestjs/co
 import {JwtService} from '@nestjs/jwt';
 import {PrismaService} from '../prisma.service';
 import * as bcrypt from 'bcryptjs';
+import { createHash } from 'node:crypto';
 
 const USER_SELECT = {
     id: true, email: true, fullName: true, phone: true, avatar: true,
@@ -19,11 +20,14 @@ export class AuthService {
         fullName: string;
         role: string;
         loyaltyPoints: number;
+        passwordHash: string;
         phone?: string | null;
         avatar?: string | null;
         favoriteBranch?: string | null
     }) {
-        const token = this.jwt.sign({sub: user.id, email: user.email, role: user.role});
+        // pv gan token voi password hash hien hanh; doi mat khau lam JWT cu het hieu luc.
+        const pv = createHash('sha256').update(user.passwordHash).digest('hex');
+        const token = this.jwt.sign({sub: user.id, email: user.email, role: user.role, pv});
         const {id, email, fullName, role, loyaltyPoints, phone, avatar, favoriteBranch} = user;
         return {token, user: {id, email, fullName, role, loyaltyPoints, phone, avatar, favoriteBranch}};
     }

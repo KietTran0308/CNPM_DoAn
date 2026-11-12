@@ -29,8 +29,19 @@ services:
       NODE_ENV: production
       DATABASE_URL: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-brewlite_local}?schema=public"
       JWT_SECRET: ${JWT_SECRET:?Can_thiet_lap_JWT_SECRET_trong_.env}
-      FRONTEND_URL: http://localhost:3100
+      FRONTEND_URL: "http://localhost:3100,http://127.0.0.1:3100"
       PORT: "4000"
+      ENABLE_DEMO_PAYMENTS: ${ENABLE_DEMO_PAYMENTS:-false}
+      ZALOPAY_APP_ID: ${ZALOPAY_APP_ID:-}
+      ZALOPAY_KEY1: ${ZALOPAY_KEY1:-}
+      ZALOPAY_KEY2: ${ZALOPAY_KEY2:-}
+      ZALOPAY_CREATE_URL: ${ZALOPAY_CREATE_URL:-https://sb-openapi.zalopay.vn/v2/create}
+      ZALOPAY_QUERY_URL: ${ZALOPAY_QUERY_URL:-https://sb-openapi.zalopay.vn/v2/query}
+      ZALOPAY_CALLBACK_URL: ${ZALOPAY_CALLBACK_URL:-}
+      # Local DB riêng: chặn cấu hình callback nhầm sang Backend Render.
+      ZALOPAY_LOCAL_MODE: 'true'
+      # Tùy chọn: Frontend HTTPS tunnel cho thiết bị di động quay lại sau thanh toán.
+      ZALOPAY_RETURN_ORIGIN: ${ZALOPAY_RETURN_ORIGIN:-}
     ports:
       - "127.0.0.1:4100:4000"
     depends_on:
@@ -49,6 +60,7 @@ services:
       dockerfile: Dockerfile.frontend
       args:
         NEXT_PUBLIC_API_URL: http://localhost:4100
+        NEXT_PUBLIC_ENABLE_DEMO_PAYMENTS: ${NEXT_PUBLIC_ENABLE_DEMO_PAYMENTS:-false}
     restart: unless-stopped
     ports:
       - "127.0.0.1:3100:3000"

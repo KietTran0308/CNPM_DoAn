@@ -106,6 +106,23 @@ describe('PricingService', () => {
         })).toThrow();
     });
 
+    it('từ chối số lượng 101 để tránh đơn khổng lồ', async () => {
+        await expect(service.calculateItem(tx, {
+            productId: PRODUCT_ID,
+            size: ProductSize.M,
+            qty: 101,
+        })).rejects.toThrow();
+    });
+
+    it('từ chối hơn 10 suất topping', () => {
+        expect(() => normalizeToppingSelections({
+            productId: PRODUCT_ID,
+            size: ProductSize.M,
+            qty: 1,
+            toppings: [{ toppingId: TOPPING_ID, servings: 11 }],
+        })).toThrow();
+    });
+
     it('từ chối size không có giá trong CSDL', async () => {
         const badTx = {
             product: { findUnique: jest.fn(async () => ({ id: PRODUCT_ID, isActive: true })) },

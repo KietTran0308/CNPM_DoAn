@@ -30,7 +30,8 @@ CREATE TYPE public.order_status AS ENUM (
 CREATE TYPE public.payment_method AS ENUM (
     'WALLET',
     'CARD',
-    'VNPAY'
+    'VNPAY',
+    'ZALOPAY'
 );
 
 CREATE TYPE public.payment_status AS ENUM (
@@ -120,6 +121,7 @@ CREATE TABLE public.order_status_history (
                                              from_status public.order_status,
                                              to_status public.order_status NOT NULL,
                                              changed_at timestamptz DEFAULT now() NOT NULL,
+                                             changed_by uuid, -- Nguoi cap nhat trang thai (nullable voi cac event tu he thong)
                                              CONSTRAINT chk_history_transition_not_same CHECK ((from_status IS DISTINCT FROM to_status))
 );
 
@@ -170,6 +172,8 @@ CREATE TABLE public.payments (
                                  paid_at timestamptz,
                                  vnp_create_date varchar(14),
                                  vnp_ip_addr varchar(45),
+                                 zp_trans_id varchar(50),
+                                 zp_order_url varchar(2048),
     -- Hoan tien mo phong: 0 neu chua hoan, so tien da hoan neu co.
                                  refunded_amount numeric(12,2) NOT NULL DEFAULT 0,
                                  refunded_at timestamptz,
@@ -329,6 +333,7 @@ CREATE INDEX idx_orders_user_created ON public.orders USING btree (user_id, crea
 CREATE INDEX idx_payments_order ON public.payments USING btree (order_id);
 
 CREATE INDEX idx_status_history_order ON public.order_status_history USING btree (order_id);
+CREATE INDEX idx_status_history_changed_by ON public.order_status_history USING btree (changed_by);
 
 CREATE INDEX idx_user_vouchers_user ON public.user_vouchers USING btree (user_id);
 -- 1 don hang chi co the su dung toi da 1 voucher, khop orders.coupon_id.
@@ -346,6 +351,9 @@ CREATE UNIQUE INDEX ux_loyalty_reversal_origin ON public.loyalty_transactions (r
 CREATE UNIQUE INDEX ux_payments_provider_ref ON public.payments(provider_ref);
 CREATE UNIQUE INDEX ux_payments_one_pending_vnpay_per_order ON public.payments(order_id)
     WHERE method = 'VNPAY' AND status = 'PENDING';
+CREATE UNIQUE INDEX ux_payments_one_pending_zalopay_per_order ON public.payments(order_id)
+    WHERE method = 'ZALOPAY' AND status = 'PENDING';
+CREATE UNIQUE INDEX ux_payments_zp_trans_id ON public.payments(zp_trans_id);
 CREATE UNIQUE INDEX ux_payments_one_success_per_order ON public.payments USING btree (order_id) WHERE (status = 'SUCCESS'::public.payment_status);
 
 CREATE UNIQUE INDEX ux_products_code ON public.products USING btree (code);
@@ -395,6 +403,8 @@ ALTER TABLE ONLY public.order_items
 
 ALTER TABLE ONLY public.order_status_history
     ADD CONSTRAINT fk_order_status_history_order FOREIGN KEY (order_id) REFERENCES public.orders(id) ON DELETE CASCADE;
+ALTER TABLE ONLY public.order_status_history
+    ADD CONSTRAINT fk_order_status_history_changed_by FOREIGN KEY (changed_by) REFERENCES public.users(id) ON DELETE SET NULL;
 
 ALTER TABLE ONLY public.orders
     ADD CONSTRAINT fk_orders_coupon FOREIGN KEY (coupon_id) REFERENCES public.coupons(id);
