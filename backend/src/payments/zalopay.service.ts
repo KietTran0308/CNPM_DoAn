@@ -1,4 +1,4 @@
-import { Injectable, InternalServerErrorException, ServiceUnavailableException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 // Các mã này xác nhận ZaloPay từ chối TẠO đơn do dữ liệu/cấu hình không hợp lệ.
@@ -18,6 +18,8 @@ export type ZaloCallbackData = {
 
 @Injectable()
 export class ZalopayService {
+    private readonly logger = new Logger(ZalopayService.name);
+
     private config() {
         const appId = Number(process.env.ZALOPAY_APP_ID);
         const key1 = process.env.ZALOPAY_KEY1?.trim() || '';
@@ -154,12 +156,51 @@ export class ZalopayService {
                 `sub_return_code=${String(result.sub_return_code ?? '?')}). Cần đối soát trước khi thử lại`,
             );
         }
-        if (typeof result.order_url !== 'string' || !result.order_url) {
-            throw new ServiceUnavailableException('ZaloPay trả thành công nhưng không có order_url; cần đối soát');
+        // ZaloPay có thể trả return_code=1 mà order_url trống/sai định dạng.
+        // Không để new URL() ném TypeError thành HTTP 500. Không đánh dấu thanh toán
+        // FAILED: createOrder đã có thể tạo giao dịch ở gateway và cần đối soát.
+        const rawOrderUrl = result.order_url;
+        const orderUrl = typeof rawOrderUrl === 'string' ? rawOrderUrl.trim() : '';
+        if (!orderUrl) {
+            this.logger.warn(JSON.stringify({
+                event: 'ZALOPAY_CREATE_INVALID_ORDER_URL',
+                returnCode: result.return_code,
+                subReturnCode: result.sub_return_code ?? null,
+                urlType: typeof rawOrderUrl,
+                urlLength: 0,
+            }));
+            throw new ServiceUnavailableException(
+                'ZaloPay báo tạo đơn thành công nhưng thiếu đường dẫn thanh toán. Giao dịch cần đối soát; không tạo lại ngay.',
+            );
         }
-        const url = new URL(result.order_url);
-        if (url.protocol !== 'https:' || !(url.hostname === 'zalopay.vn' || url.hostname.endsWith('.zalopay.vn'))) {
-            throw new ServiceUnavailableException('ZaloPay trả về đường dẫn thanh toán không hợp lệ');
+        let url: URL;
+        try {
+            url = new URL(orderUrl);
+        } catch {
+            // Không in nguyên order_url: có thể chứa mã/token thanh toán.
+            this.logger.warn(JSON.stringify({
+                event: 'ZALOPAY_CREATE_INVALID_ORDER_URL',
+                returnCode: result.return_code,
+                subReturnCode: result.sub_return_code ?? null,
+                urlType: typeof rawOrderUrl,
+                urlLength: orderUrl.length,
+                startsWithHttps: orderUrl.startsWith('https://'),
+            }));
+            throw new ServiceUnavailableException(
+                'ZaloPay trả về URL thanh toán sai định dạng. Giao dịch cần đối soát; không tạo lại ngay.',
+            );
+        }
+        if (url.protocol !== 'https:' ||
+            !(url.hostname === 'zalopay.vn' || url.hostname.endsWith('.zalopay.vn')) ||
+            Boolean(url.username || url.password) || (url.port !== '' && url.port !== '443')) {
+            this.logger.warn(JSON.stringify({
+                event: 'ZALOPAY_CREATE_UNTRUSTED_ORDER_URL',
+                hostname: url.hostname,
+                protocol: url.protocol,
+            }));
+            throw new ServiceUnavailableException(
+                'ZaloPay trả về địa chỉ thanh toán không được phép. Giao dịch cần đối soát; không tạo lại ngay.',
+            );
         }
         return url.toString();
     }

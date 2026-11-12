@@ -50,6 +50,26 @@ describe('ZaloPay Sandbox v2 signing', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('does not throw raw TypeError when ZaloPay returns malformed order_url after success', async () => {
+    global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({
+      return_code: 1, sub_return_code: 1, order_url: 'not-a-valid-url',
+    }) })) as any;
+    await expect(service.createOrder({
+      appTransId: '261112_abc123456789', userId: 'test-user-123', amount: 90000,
+      orderId: 'order-123', expiresAt: new Date(Date.now() + 15 * 60_000),
+    })).rejects.toThrow('Giao dịch cần đối soát');
+  });
+
+  it('rejects external payment URLs even when return_code is 1', async () => {
+    global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({
+      return_code: 1, order_url: 'https://example.com/pay',
+    }) })) as any;
+    await expect(service.createOrder({
+      appTransId: '261112_abc123456789', userId: 'test-user-123', amount: 90000,
+      orderId: 'order-123', expiresAt: new Date(Date.now() + 15 * 60_000),
+    })).rejects.toThrow('địa chỉ thanh toán không được phép');
+  });
+
   it('rejects tampered callback and accepts exact signed data using Key2', () => {
     const data = JSON.stringify({ app_id: 12345, app_trans_id: '261112_abc123456789',
       amount: 90000, zp_trans_id: 261112000000112 });
