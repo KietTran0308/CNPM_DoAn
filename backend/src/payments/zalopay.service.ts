@@ -10,6 +10,11 @@ export class ZalopayCreationRejectedError extends Error {
     }
 }
 
+// Ký tự định dạng (Cf), điều khiển (Cc) và khoảng trắng Unicode (Z) ở hai đầu chuỗi.
+const INVISIBLE_EDGE = /^[\p{Cf}\p{Cc}\p{Z}]+|[\p{Cf}\p{Cc}\p{Z}]+$/gu;
+const codePointLabel = (char: string) =>
+    'U+' + (char.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, '0');
+
 export type ZaloCallback = { data: string; mac: string; type?: number };
 export type ZaloCallbackData = {
     app_id: number; app_trans_id: string; amount: number; zp_trans_id: number | string;
@@ -99,51 +104,100 @@ export class ZalopayService {
     }
 
     /**
-     * Chỉ khôi phục MỘT lớp mã hóa của một URL HTTPS từ chính phản hồi ZaloPay.
-     * Không tự tạo URL từ order_token / zp_trans_token (không có đặc tả bảo đảm).
-     * URL sau khôi phục vẫn phải qua danh sách domain tin cậy ở createOrder().
+     * ZaloPay v2 trả order_url là URL HTTPS. Chỉ chuẩn hóa những dạng
+     * bao gói URL có thể xác định rõ, rồi kiểm tra HTTPS + hostname bên dưới.
+     * Không bao giờ tạo URL từ order_token, zp_trans_token hoặc qr_code.
      */
     private decodeOrderUrl(raw: string): { value: string; format: string } {
-        const original = raw.trim();
-        if (/^https:\/\//i.test(original)) return { value: original, format: 'absolute-https' };
+        let value = raw.trim();
+        // Một số response có ký tự vô hình ở ĐẦU/CUỐI chuỗi (ZWSP, ZWNJ, ZWJ, WORD JOINER,
+        // BOM, LRM/RLM, NBSP, ký tự điều khiển...). Chỉ xóa ở hai đầu, không xóa ở giữa URL.
+        const stripped = value.replace(INVISIBLE_EDGE, '');
+        const hadInvisibleEdge = stripped !== value;
+        value = stripped;
 
-        // Đôi khi bên trung gian JSON-encode thêm lần nữa: '"https://..."'.
-        // Chỉ hỗ trợ giá trị JSON string trọn vẹn, không xử lý JSON/object tùy ý.
-        if (original.startsWith('"') && original.endsWith('"')) {
-            try {
-                const decoded: unknown = JSON.parse(original);
-                if (typeof decoded === 'string' && /^https:\/\//i.test(decoded)) {
-                    return { value: decoded, format: 'json-quoted-https' };
-                }
-            } catch { /* Không phải chuỗi JSON hợp lệ. */ }
+        if (/^https:\/\//i.test(value)) {
+            return { value, format: hadInvisibleEdge ? 'invisible-prefix-https' : 'absolute-https' };
         }
 
-        // Một số lớp trung gian có thể escape dấu / thêm lần nữa.
-        if (original.startsWith('https:') && original.includes('\\/')) {
-            const decoded = original.replaceAll('\\/', '/');
-            if (/^https:\/\//i.test(decoded)) {
-                return { value: decoded, format: 'escaped-https' };
+        // Một lớp JSON string bao ngoài URL, ví dụ: '"https://..."'.
+        if (value.startsWith('"') && value.endsWith('"')) {
+            try {
+                const parsed: unknown = JSON.parse(value);
+                if (typeof parsed === 'string' && /^https:\/\//i.test(parsed)) {
+                    return { value: parsed, format: 'json-quoted-https' };
+                }
+            } catch { /* Giữ nguyên để chẩn đoán. */ }
+        }
+
+        // URL trả về có dấu gạch chéo escaped (không giải mã token/query).
+        if (/^https:/i.test(value) && value.includes('\\/')) {
+            const unescaped = value.replaceAll('\\/', '/');
+            if (/^https:\/\//i.test(unescaped)) {
+                return { value: unescaped, format: 'escaped-https' };
             }
         }
 
-        // Toàn bộ URL đôi khi bị URL-encode, ví dụ https%3A%2F%2F...
-        if (/^https%3a%2f%2f/i.test(original)) {
-            try {
-                const decoded = decodeURIComponent(original);
-                if (/^https:\/\//i.test(decoded)) {
-                    return { value: decoded, format: 'percent-encoded-https' };
-                }
-            } catch { /* Dữ liệu phần trăm không hợp lệ. */ }
+        // Không thể tự đoán hostname. Nếu thiếu scheme, chỉ khôi phục cho
+        // hai gateway được mô tả trong tài liệu ZaloPay, không cho host tùy ý.
+        const knownGateway = /^(?:sbgateway|qcgateway)\.zalopay\.vn(?:[/?#:]|$)/i;
+        if (knownGateway.test(value)) {
+            return { value: 'https://' + value, format: 'gateway-without-scheme' };
+        }
+        if (value.startsWith('//') && knownGateway.test(value.slice(2))) {
+            return { value: 'https:' + value, format: 'protocol-relative-gateway' };
         }
 
-        // Dấu hiệu hữu ích nhưng KHÔNG dùng để tự chế một liên kết thanh toán.
-        const format = original.startsWith('http://') ? 'http-not-https'
-            : original.startsWith('//') ? 'protocol-relative'
-                : /^https?:\\\/\\\//i.test(original) ? 'escaped-slashes'
-                    : /^[a-z][a-z0-9+.-]*:/i.test(original) ? 'other-scheme'
-                        : /^[A-Za-z0-9_+\/=-]+$/.test(original) ? 'token-like'
-                            : original.startsWith('<') ? 'html-like' : 'unknown';
-        return { value: original, format };
+        // Chỉ tối đa hai lần giải mã URI, không giải mã payload/token riêng lẻ.
+        // Hỗ trợ https%3A%2F%2F... và https%253A%252F%252F...
+        if (/^https%(?:3a|253a)/i.test(value)) {
+            let candidate = value;
+            for (let count = 1; count <= 2; count++) {
+                try { candidate = decodeURIComponent(candidate); }
+                catch { break; }
+                if (/^https:\/\//i.test(candidate)) {
+                    return { value: candidate, format: count === 1 ? 'percent-encoded-https' : 'double-percent-encoded-https' };
+                }
+            }
+        }
+
+        return { value, format: /^http:\/\//i.test(value) ? 'http-not-https'
+                : /^[a-z][a-z0-9+.-]*:/i.test(value) ? 'other-scheme'
+                    : value.startsWith('//') ? 'protocol-relative-unknown'
+                        : value.startsWith('{') || value.startsWith('[') ? 'json-object-like'
+                            : /^https%/i.test(value) ? 'encoded-https-unknown'
+                                : /^[A-Za-z0-9_+\/=-]+$/.test(value) ? 'token-like'
+                                    : value.startsWith('<') ? 'html-like' : 'unknown' };
+    }
+
+    /**
+     * Không ghi nguyên link, token, query hoặc thông tin thanh toán lên Render.
+     * Định dạng các ký tự đầu được rút về nhóm chữ/số/dấu câu để tra lỗi.
+     */
+    private safeOrderUrlDiagnostics(value: string) {
+        const prefixShape = Array.from(value.slice(0, 20)).map(char => {
+            if (/^[a-z]$/i.test(char)) return 'A';
+            if (/^[0-9]$/.test(char)) return '9';
+            if (char === ':') return ':';
+            if (char === '/') return '/';
+            if (char === '.') return '.';
+            if (char === '?') return '?';
+            if (char === '=') return '=';
+            if (char === '%') return '%';
+            if (char === '\\') return '\\';
+            return '_';
+        }).join('');
+        return {
+            prefixShape,
+            containsKnownGateway: /(?:sbgateway|qcgateway)\.zalopay\.vn/i.test(value),
+            containsHttpsScheme: /https:\/\//i.test(value),
+            containsEncodedHttps: /https%(?:3a|253a)/i.test(value),
+            startsWithInvisibleChar: /^[\p{Cf}\p{Cc}\p{Z}]/u.test(value),
+            // M\u00E3 Unicode c\u1EE7a 3 k\u00FD t\u1EF1 \u0111\u1EA7u/cu\u1ED1i: kh\u00F4ng l\u1ED9 token nh\u01B0ng ch\u1EC9 ra ngay k\u00FD t\u1EF1 l\u1EA1.
+            leadingCodePoints: Array.from(value).slice(0, 3).map(codePointLabel),
+            trailingCodePoints: Array.from(value).slice(-3).map(codePointLabel),
+            hasWhitespace: /\s/.test(value),
+        };
     }
 
     async createOrder(input: {
@@ -216,6 +270,7 @@ export class ZalopayService {
             urlType: typeof rawOrderUrl,
             urlLength: orderUrl.length,
             urlFormat: decoded.format,
+            ...this.safeOrderUrlDiagnostics(orderUrl),
             hasOrderToken: typeof result.order_token === 'string' && result.order_token.length > 0,
             hasZpTransToken: typeof result.zp_trans_token === 'string' && result.zp_trans_token.length > 0,
             hasQrCode: typeof result.qr_code === 'string' && result.qr_code.length > 0,
