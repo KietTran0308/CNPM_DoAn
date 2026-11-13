@@ -3,8 +3,6 @@
 import { useMemo } from 'react';
 import QRCode from '../vendor/qrcode/index.cjs';
 
-// No third-party QR image API: the scan payload stays in the user's browser.
-// SVG includes a 4-module quiet zone, as required by common QR scanners.
 export function MaQrZalopay({ value }: { value: string }) {
     const matrix = useMemo(() => {
         if (!value || value.length > 2048) return null;

@@ -36,7 +36,7 @@ import { DangNhap } from '../man-hinh/DangNhap';
 import { ThucDon } from '../man-hinh/ThucDon';
 import { ChiTietMon } from '../man-hinh/ChiTietMon';
 import { GioHang, ModalSuaMon } from '../man-hinh/GioHang';
-import { ThanhToan } from '../man-hinh/ThanhToan';
+import { ThanhToan, type ZalopayCheckout } from '../man-hinh/ThanhToan';
 import { DatHangThanhCong } from '../man-hinh/DatHangThanhCong';
 import { LichSuDon } from '../man-hinh/LichSuDon';
 
@@ -215,6 +215,26 @@ function UngDungDatNuoc() {
     const [walletType, setWalletType] = useState<'MoMo' | 'ZaloPay'>(process.env.NEXT_PUBLIC_ENABLE_DEMO_PAYMENTS === 'true' ? 'MoMo' : 'ZaloPay');
     const [simulatePaymentError, setSimulatePaymentError] = useState(false);
     const [currentPendingOrderId, setCurrentPendingOrderId] = useState<string | null>(null);
+    // QR thuộc đúng giao dịch ZaloPay do Backend tạo. Không chuyển sang /payment-qr.
+    const [zalopayCheckout, setZalopayCheckout] = useState<ZalopayCheckout | null>(null);
+    const [zalopayMessage, setZalopayMessage] = useState<string | null>(null);
+    const [zalopayNeedsReconciliation, setZalopayNeedsReconciliation] = useState(false);
+
+    const hienQrTrongThanhToan = (data: ZalopayCheckout) => {
+        sessionStorage.setItem('brewlite_zalopay_order', data.orderId);
+        setCurrentPendingOrderId(data.orderId);
+        setPaymentMethod('wallet');
+        setWalletType('ZaloPay');
+        setCheckoutStatus(null);
+        setZalopayCheckout(data);
+        setZalopayMessage(data.qrCode
+            ? 'Quét mã bằng môi trường ZaloPay Sandbox và chờ hệ thống xác nhận.'
+            : 'Giao dịch không có QR. Bạn có thể mở đường dẫn thanh toán bên dưới nếu có.');
+        setZalopayNeedsReconciliation(false);
+        setStockError(null);
+        setManHinhHienTai('checkout');
+    };
+
     // Mỗi lần gửi lại cùng request thanh toán giữ nguyên key (kể cả timeout HTTP).
     const paymentKeysRef = useRef<Record<string, string>>({});
     const resetPaymentKey = (orderId: string, method: string, simulateFailure: boolean) => {
@@ -233,6 +253,11 @@ function UngDungDatNuoc() {
     };
     useEffect(() => {
         // Quay về khi mất mạng/đóng tab ZaloPay: không tạo đơn mới khi gateway còn chờ.
+        const resumeParam = new URLSearchParams(window.location.search).get('resumeZalopay');
+        if (resumeParam && /^[0-9a-f-]{36}$/i.test(resumeParam) && getStoredToken()) {
+            sessionStorage.setItem('brewlite_zalopay_order', resumeParam);
+            window.history.replaceState(null, '', window.location.pathname);
+        }
         const pendingId = sessionStorage.getItem('brewlite_zalopay_order');
         if (!pendingId || !getStoredToken()) return;
         api.getZalopayStatus(pendingId).then(result => {
@@ -241,6 +266,17 @@ function UngDungDatNuoc() {
                 if (result.orderStatus !== 'CANCELLED') sessionStorage.removeItem('brewlite_create_key');
             } else if (result.payment?.status !== 'FAILED') {
                 setCurrentPendingOrderId(pendingId);
+                if (result.payment?.status === 'PENDING' && result.payment.method === 'ZALOPAY' &&
+                    !result.awaitingGateway && (result.payment.qrCode || result.payment.paymentUrl)) {
+                    void api.getMyOrders().then(orders => {
+                        const order = orders.find(item => item.id === pendingId);
+                        if (!order) return;
+                        hienQrTrongThanhToan({ orderId: pendingId, orderCode: order.orderCode,
+                            amount: order.total, qrCode: result.payment!.qrCode || null,
+                            paymentUrl: result.payment!.paymentUrl || null,
+                            expiresAt: result.expiresAt || null });
+                    }).catch(() => { /* Có thể khôi phục từ lịch sử khi API hoạt động. */ });
+                }
             }
         }).catch(() => { /* Vẫn giữ key để kiểm tra sau, không tự hủy. */ });
     }, []);
@@ -248,6 +284,107 @@ function UngDungDatNuoc() {
     const [checkoutStatus, setCheckoutStatus] = useState<OrderStatus | null>(null);
     const [checkoutLoading, setCheckoutLoading] = useState(false);
     const [stockError, setStockError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!zalopayCheckout || manHinhHienTai !== 'checkout') return;
+        const orderId = zalopayCheckout.orderId;
+        let stopped = false;
+        let checking = false;
+        const kiemTra = async () => {
+            if (stopped || checking) return;
+            checking = true;
+            try {
+                // Chỉ Backend/callback đã xác minh mới quyết định PAID.
+                const result = await api.getZalopayStatus(orderId);
+                if (stopped) return;
+                if (['PAID', 'PREPARING', 'READY', 'COMPLETED'].includes(result.orderStatus)) {
+                    const orders = await api.getMyOrders();
+                    if (stopped) return;
+                    const paidOrder = orders.find(o => o.id === orderId);
+                    if (!paidOrder || !['PAID', 'PREPARING', 'READY', 'COMPLETED'].includes(paidOrder.status)) {
+                        setZalopayMessage('Đã nhận xác nhận thanh toán. Đang đồng bộ đơn hàng...');
+                        return;
+                    }
+                    setOrderHistory(orders);
+                    setLastOrder(paidOrder);
+                    queryClient.invalidateQueries({ queryKey: QUERY_KEYS.lichSuDon });
+                    clearCart();
+                    setUsePoints(false);
+                    setPointsToRedeem(0);
+                    setCheckoutStatus(null);
+                    setStockError(null);
+                    setCurrentPendingOrderId(null);
+                    setZalopayCheckout(null);
+                    setZalopayMessage(null);
+                    setZalopayNeedsReconciliation(false);
+                    paymentKeysRef.current = {};
+                    sessionStorage.removeItem('brewlite_create_key');
+                    sessionStorage.removeItem('brewlite_zalopay_order');
+                    api.getMe().then(me => { setUser(me); setStoredUser(me); }).catch(() => {});
+                    setManHinhHienTai('success');
+                    return;
+                }
+                if (result.requiresReconciliation || result.payment?.status === 'SUCCESS') {
+                    setZalopayNeedsReconciliation(true);
+                    setZalopayMessage('Cổng thanh toán đã ghi nhận kết quả nhưng đơn chưa hoàn tất. Liên hệ ADMIN đối soát, không thanh toán lại.');
+                    return;
+                }
+                if (result.payment?.status === 'FAILED') {
+                    setZalopayCheckout(null);
+                    if (sessionStorage.getItem('brewlite_zalopay_order') === orderId) {
+                        sessionStorage.removeItem('brewlite_zalopay_order');
+                    }
+                    setCheckoutStatus('PAYMENT_FAILED');
+                    setZalopayMessage(null);
+                    setZalopayNeedsReconciliation(false);
+                    setStockError('ZaloPay đã xác nhận giao dịch thất bại. Bạn có thể thử lại khi giao dịch trước đã kết thúc.');
+                    // Đơn thanh toán lại từ Lịch sử có thể không có giỏ hàng hiện tại.
+                    if (useGioHang.getState().cartLines.length === 0) {
+                        setManHinhHienTai('history');
+                        setStatusNotice({ type: 'error', orderId,
+                            message: 'Giao dịch đã thất bại. Hãy thử lại từ Lịch sử đơn hàng.' });
+                        void api.getMyOrders().then(setOrderHistory).catch(() => {});
+                    }
+                    return;
+                }
+                if (result.orderStatus === 'CANCELLED' || result.orderStatus === 'PAYMENT_FAILED') {
+                    setZalopayNeedsReconciliation(true);
+                    setZalopayMessage('Đơn không còn chờ thanh toán. Kiểm tra lịch sử đơn và nhờ ADMIN đối soát.');
+                    return;
+                }
+                if (result.payment?.status === 'PENDING' && result.payment.method === 'ZALOPAY') {
+                    const expired = !!result.expiresAt && Date.parse(result.expiresAt) <= Date.now();
+                    if (expired || result.awaitingGateway) {
+                        setZalopayNeedsReconciliation(true);
+                        setZalopayMessage('Giao dịch đã hết hạn hoặc quá hạn xác nhận. Không quét tiếp, không tạo giao dịch khác; nhờ ADMIN đối soát.');
+                        return;
+                    }
+                    setZalopayCheckout(prev => prev?.orderId === orderId ? {
+                        ...prev,
+                        qrCode: result.payment?.qrCode || null,
+                        paymentUrl: result.payment?.paymentUrl || null,
+                        expiresAt: result.expiresAt || null,
+                    } : prev);
+                    setZalopayMessage(result.payment.qrCode
+                        ? 'Đang chờ ZaloPay xác nhận. Trang này tự kiểm tra kết quả mỗi 5 giây.'
+                        : 'Chưa có mã QR. Có thể dùng liên kết thanh toán nếu được cung cấp.');
+                    return;
+                }
+                setZalopayNeedsReconciliation(true);
+                setZalopayMessage('Không xác định được giao dịch đang chờ. Hãy kiểm tra lịch sử đơn trước khi thử lại.');
+            } catch (error) {
+                if (!stopped) setZalopayMessage('Tạm thời không kiểm tra được trạng thái ZaloPay. Giữ nguyên giao dịch và chờ kết nối phục hồi.');
+            } finally {
+                checking = false;
+            }
+        };
+        void kiemTra();
+        const interval = window.setInterval(() => {
+            if (document.visibilityState === 'visible') void kiemTra();
+        }, 5000);
+        return () => { stopped = true; window.clearInterval(interval); };
+    }, [zalopayCheckout?.orderId, manHinhHienTai, clearCart, queryClient]);
+
 
     const [editingItemId, setEditingItemId] = useState<string | null>(null);
     const [editProductId, setEditProductId] = useState<string>('');
@@ -415,6 +552,9 @@ function UngDungDatNuoc() {
         setStoredUser(null);
         setMoMenuTaiKhoan(false);
         setCurrentPendingOrderId(null);
+        setZalopayCheckout(null);
+        setZalopayMessage(null);
+        setZalopayNeedsReconciliation(false);
         setCheckoutStatus(null);
         paymentKeysRef.current = {};
         sessionStorage.removeItem('brewlite_create_key');
@@ -702,10 +842,10 @@ function UngDungDatNuoc() {
                     // Khôi phục đúng URL đã lưu, không tạo giao dịch/app_trans_id mới.
                     if (currentGateway.payment.method === 'ZALOPAY' &&
                         (currentGateway.payment.qrCode || currentGateway.payment.paymentUrl)) {
-                        sessionStorage.setItem('brewlite_zalopay_order', orderId);
-                        window.location.assign(currentGateway.payment.qrCode
-                            ? `/payment-qr?orderId=${encodeURIComponent(orderId)}`
-                            : currentGateway.payment.paymentUrl!);
+                        hienQrTrongThanhToan({ orderId, orderCode: officialCode,
+                            amount: officialTotal, qrCode: currentGateway.payment.qrCode || null,
+                            paymentUrl: currentGateway.payment.paymentUrl || null,
+                            expiresAt: currentGateway.expiresAt || null });
                         return;
                     }
                     throw new Error(currentGateway.awaitingGateway
@@ -715,13 +855,10 @@ function UngDungDatNuoc() {
                 if (currentGateway.payment?.status === 'FAILED') resetPaymentKey(orderId, 'ZALOPAY', false);
                 const idempotencyKey = getPaymentKey(orderId, 'ZALOPAY', false);
                 const zalopay = await api.createZalopayPayment(orderId, idempotencyKey);
-                sessionStorage.setItem('brewlite_zalopay_order', orderId);
-                if (zalopay.status === 'SUCCESS') {
-                    window.location.assign(`/payment-result?orderId=${encodeURIComponent(orderId)}`);
-                } else if (zalopay.qrCode) {
-                    window.location.assign(`/payment-qr?orderId=${encodeURIComponent(orderId)}`);
-                } else if (zalopay.paymentUrl) {
-                    window.location.assign(zalopay.paymentUrl);
+                if (zalopay.qrCode || zalopay.paymentUrl || zalopay.status === 'SUCCESS') {
+                    hienQrTrongThanhToan({ orderId, orderCode: officialCode,
+                        amount: officialTotal, qrCode: zalopay.qrCode || null,
+                        paymentUrl: zalopay.paymentUrl || null });
                 } else {
                     throw new Error('ZaloPay đã tạo giao dịch nhưng chưa có QR/URL hợp lệ; nhờ ADMIN đối soát.');
                 }
@@ -842,6 +979,9 @@ function UngDungDatNuoc() {
         }
         paymentKeysRef.current = {};
         setCurrentPendingOrderId(null);
+        setZalopayCheckout(null);
+        setZalopayMessage(null);
+        setZalopayNeedsReconciliation(false);
         setCheckoutStatus(null);
         setStockError(null);
         setSimulatePaymentError(false);
@@ -867,10 +1007,10 @@ function UngDungDatNuoc() {
             if (gateway.payment?.status === 'PENDING') {
                 if (gateway.payment.method === 'ZALOPAY' &&
                     (gateway.payment.qrCode || gateway.payment.paymentUrl)) {
-                    sessionStorage.setItem('brewlite_zalopay_order', orderId);
-                    window.location.assign(gateway.payment.qrCode
-                        ? `/payment-qr?orderId=${encodeURIComponent(orderId)}`
-                        : gateway.payment.paymentUrl!);
+                    hienQrTrongThanhToan({ orderId, orderCode: order.orderCode,
+                        amount: order.total, qrCode: gateway.payment.qrCode || null,
+                        paymentUrl: gateway.payment.paymentUrl || null,
+                        expiresAt: gateway.expiresAt || null });
                     return;
                 }
                 throw new Error(gateway.awaitingGateway
@@ -883,13 +1023,10 @@ function UngDungDatNuoc() {
                 if (gateway.payment?.status === 'FAILED') resetPaymentKey(orderId, 'ZALOPAY', false);
                 const idempotencyKey = getPaymentKey(orderId, 'ZALOPAY', false);
                 const payment = await api.createZalopayPayment(orderId, idempotencyKey);
-                sessionStorage.setItem('brewlite_zalopay_order', orderId);
-                if (payment.status === 'SUCCESS') {
-                    window.location.assign(`/payment-result?orderId=${encodeURIComponent(orderId)}`);
-                } else if (payment.qrCode) {
-                    window.location.assign(`/payment-qr?orderId=${encodeURIComponent(orderId)}`);
-                } else if (payment.paymentUrl) {
-                    window.location.assign(payment.paymentUrl);
+                if (payment.qrCode || payment.paymentUrl || payment.status === 'SUCCESS') {
+                    hienQrTrongThanhToan({ orderId, orderCode: order.orderCode,
+                        amount: order.total, qrCode: payment.qrCode || null,
+                        paymentUrl: payment.paymentUrl || null });
                 } else {
                     throw new Error('ZaloPay chưa trả QR/URL hợp lệ; vui lòng nhờ ADMIN đối soát.');
                 }
@@ -948,6 +1085,9 @@ function UngDungDatNuoc() {
             // Giữ nguyên giỏ hàng để khách có thể chỉnh sửa và đặt lại.
             if (currentPendingOrderId === orderId) {
                 setCurrentPendingOrderId(null);
+                setZalopayCheckout(null);
+                setZalopayMessage(null);
+                setZalopayNeedsReconciliation(false);
                 setCheckoutStatus(null);
                 setStockError(null);
                 sessionStorage.removeItem('brewlite_create_key');
@@ -1122,12 +1262,18 @@ function UngDungDatNuoc() {
                         walletType={walletType}
                         setWalletType={setWalletType}
                         onBackToCart={() => {
-                            if (currentPendingOrderId) void xuLyHuyDonDangThanhToan();
+                            if (zalopayCheckout) {
+                                void taiLichSuDon();
+                                setManHinhHienTai('history');
+                            } else if (currentPendingOrderId) void xuLyHuyDonDangThanhToan();
                             else setManHinhHienTai('cart');
                         }}
                         onRetryPayment={xuLyThuLaiThanhToan}
                         onCancelCurrentOrder={xuLyHuyDonDangThanhToan}
                         onConfirmPay={xuLyXacNhanThanhToan}
+                        zalopayCheckout={zalopayCheckout}
+                        zalopayMessage={zalopayMessage}
+                        zalopayNeedsReconciliation={zalopayNeedsReconciliation}
                     />
                 )}
 

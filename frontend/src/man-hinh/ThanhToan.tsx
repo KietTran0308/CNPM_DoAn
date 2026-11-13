@@ -1,8 +1,18 @@
 import React from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { User, OrderStatus, formatPrice, CartLine } from '../api';
+import { MaQrZalopay } from './MaQrZalopay';
 
 const DEMO_PAYMENTS = process.env.NEXT_PUBLIC_ENABLE_DEMO_PAYMENTS === 'true';
+
+export interface ZalopayCheckout {
+    orderId: string;
+    orderCode?: number | string | null;
+    amount: number; // Số tiền chính thức của đơn do Backend trả về.
+    qrCode: string | null;
+    paymentUrl: string | null;
+    expiresAt?: string | null;
+}
 
 interface ThanhToanProps {
     user: User | null;
@@ -36,6 +46,9 @@ interface ThanhToanProps {
     onRetryPayment: () => void;
     onCancelCurrentOrder: () => void;
     onConfirmPay: () => void;
+    zalopayCheckout?: ZalopayCheckout | null;
+    zalopayMessage?: string | null;
+    zalopayNeedsReconciliation?: boolean;
 }
 
 export const ThanhToan: React.FC<ThanhToanProps> = ({
@@ -70,7 +83,21 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                                                         onRetryPayment,
                                                         onCancelCurrentOrder,
                                                         onConfirmPay,
+                                                        zalopayCheckout = null,
+                                                        zalopayMessage = null,
+                                                        zalopayNeedsReconciliation = false,
                                                     }) => {
+    const [secondsLeft, setSecondsLeft] = React.useState<number | null>(null);
+    React.useEffect(() => {
+        if (!zalopayCheckout?.expiresAt) {
+            setSecondsLeft(null);
+            return;
+        }
+        const update = () => setSecondsLeft(Math.max(0, Math.ceil((Date.parse(zalopayCheckout.expiresAt!) - Date.now()) / 1000)));
+        update();
+        const interval = window.setInterval(update, 1000);
+        return () => window.clearInterval(interval);
+    }, [zalopayCheckout?.expiresAt]);
     const tamTinh =
         typeof rawSubtotal === 'number'
             ? rawSubtotal
@@ -88,7 +115,7 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                 <div className="flex items-center gap-3">
                     <button
                         type="button"
-                        aria-label="Quay lại giỏ hàng"
+                        aria-label={zalopayCheckout ? "Xem lịch sử đơn" : "Quay lại giỏ hàng"}
                         onClick={onBackToCart}
                         className="w-9 h-9 rounded-lg border border-[#D5CCB4] bg-[#EDE6D1] hover:bg-[#124E35] hover:text-[#F5F0E1] text-[#124E35] flex items-center justify-center cursor-pointer transition-colors"
                     >
@@ -135,7 +162,7 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                         </div>
                     )}
 
-                    <div className="bg-[#FBF9F5] border border-[#E2D9C0] rounded-xl p-5 space-y-3.5">
+                    {!zalopayCheckout && <div className="bg-[#FBF9F5] border border-[#E2D9C0] rounded-xl p-5 space-y-3.5">
                         <div className="text-sm font-semibold text-[#124E35] pb-2 border-b border-[#E2D9C0]">
                             Chọn phương thức thanh toán
                         </div>
@@ -304,7 +331,7 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                                 </p>
                             )}
                         </div>}
-                    </div>
+                    </div>}
                 </div>
 
                 <div className="lg:col-span-5 lg:sticky lg:top-6 bg-[#FBF9F5] border border-[#E2D9C0] rounded-xl p-5 space-y-4">
@@ -312,7 +339,11 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                         Chi tiết đơn thanh toán
                     </h2>
 
-                    {cartLines.length > 0 && (
+                    {zalopayCheckout && <p className="text-xs text-[#124E35]">
+                        Mã đơn: <strong>{zalopayCheckout.orderCode || zalopayCheckout.orderId}</strong>
+                        <span className="block mt-1 text-neutral-600">Số tiền dưới đây lấy từ đơn hàng đã lưu trên Backend.</span>
+                    </p>}
+                    {!zalopayCheckout && cartLines.length > 0 && (
                         <div className="space-y-2.5 pb-3 border-b border-[#E2D9C0]">
                             {cartLines.map((line) => (
                                 <div key={line.item.id} className="flex justify-between items-start gap-2 text-xs">
@@ -332,7 +363,7 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                         </div>
                     )}
 
-                    {onApplyPromo && setPromoCodeInput && setPromoError && onRemovePromo && (
+                    {!zalopayCheckout && onApplyPromo && setPromoCodeInput && setPromoError && onRemovePromo && (
                         <div className="pb-3 border-b border-[#E2D9C0]">
                             <form onSubmit={onApplyPromo} className="flex gap-2">
                                 <input
@@ -369,7 +400,7 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                         </div>
                     )}
 
-                    <div className="p-4 border border-[#D5CCB4] bg-[#EDE6D1]/40 rounded-xl space-y-3">
+                    {!zalopayCheckout && <div className="p-4 border border-[#D5CCB4] bg-[#EDE6D1]/40 rounded-xl space-y-3">
                         <div className="flex items-center justify-between text-xs sm:text-sm font-semibold text-[#124E35]">
                             <span>Sử dụng điểm thưởng</span>
                             <span className="font-mono tabular-nums font-semibold">{userPoints} điểm</span>
@@ -435,24 +466,24 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                                 Bạn chưa có điểm thưởng khả dụng (Mỗi 10.000đ thanh toán nhận +1 điểm).
                             </div>
                         )}
-                    </div>
+                    </div>}
 
                     <div className="space-y-2">
-                        <div className="flex items-center justify-between text-xs text-neutral-600">
+                        {!zalopayCheckout && <div className="flex items-center justify-between text-xs text-neutral-600">
                             <span>Tạm tính</span>
                             <span className="font-mono tabular-nums text-neutral-800">
                 {formatPrice(tamTinh)}
               </span>
-                        </div>
+                        </div>}
 
-                        {appliedPromo && (
+                        {!zalopayCheckout && appliedPromo && (
                             <div className="flex items-center justify-between text-xs text-[#124E35] font-semibold">
                                 <span>Ưu đãi ({appliedPromo.code})</span>
                                 <span className="font-mono tabular-nums">-{formatPrice(discountAmount)}</span>
                             </div>
                         )}
 
-                        {usePoints && actualPointsUsed > 0 && (
+                        {!zalopayCheckout && usePoints && actualPointsUsed > 0 && (
                             <div className="flex items-center justify-between text-xs text-[#124E35] font-semibold">
                                 <span>Đổi điểm thưởng ({actualPointsUsed} điểm)</span>
                                 <span className="font-mono tabular-nums">-{formatPrice(pointsDiscount)}</span>
@@ -464,12 +495,12 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                 Tổng số tiền thanh toán
               </span>
                             <span className="font-mono tabular-nums font-bold text-lg text-[#124E35]">
-                {formatPrice(finalPayable)}
+                {formatPrice(zalopayCheckout?.amount ?? finalPayable)}
               </span>
                         </div>
                     </div>
 
-                    {checkoutStatus === 'PAYMENT_FAILED' && (
+                    {!zalopayCheckout && checkoutStatus === 'PAYMENT_FAILED' && (
                         <div className="border border-[#D5CCB4] p-4 bg-[#EDE6D1] rounded-xl text-center space-y-2.5">
                             <div className="text-xs sm:text-sm font-semibold text-[#124E35]">
                                 Giao dịch chưa thành công
@@ -497,7 +528,7 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                         </div>
                     )}
 
-                    {DEMO_PAYMENTS && finalPayable > 0 && !(paymentMethod === 'wallet' && walletType === 'ZaloPay') && <label className="flex items-center gap-2 text-xs text-neutral-500 cursor-pointer select-none pt-1">
+                    {!zalopayCheckout && DEMO_PAYMENTS && finalPayable > 0 && !(paymentMethod === 'wallet' && walletType === 'ZaloPay') && <label className="flex items-center gap-2 text-xs text-neutral-500 cursor-pointer select-none pt-1">
                         <input
                             type="checkbox"
                             checked={simulatePaymentError}
@@ -506,18 +537,51 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                         />
                         <span>Mô phỏng lỗi giao dịch</span>
                     </label>}
-                    {DEMO_PAYMENTS && <p className="text-xs text-amber-700">Ví MoMo và thẻ ngân hàng chỉ mô phỏng, không ghi nhận tiền thật.</p>}
-                    {finalPayable > 0 && paymentMethod === 'wallet' && walletType === 'ZaloPay' &&
+                    {!zalopayCheckout && DEMO_PAYMENTS && <p className="text-xs text-amber-700">Ví MoMo và thẻ ngân hàng chỉ mô phỏng, không ghi nhận tiền thật.</p>}
+                    {!zalopayCheckout && finalPayable > 0 && paymentMethod === 'wallet' && walletType === 'ZaloPay' &&
                         <p className="text-xs text-neutral-600">Sau khi tạo giao dịch, quét mã QR ZaloPay (hoặc mở cổng HTTPS). Đơn chỉ thành công khi Backend xác nhận thanh toán.</p>}
+
+                    {zalopayCheckout && (
+                        <section aria-live="polite" className="rounded-xl border border-[#D5CCB4] bg-white p-4 space-y-3 text-center">
+                            <h3 className="text-base font-semibold text-[#124E35]">Quét mã QR ZaloPay của đơn hàng</h3>
+                            <p className="text-xs text-neutral-700">{zalopayMessage || 'Đang chờ ZaloPay xác nhận thanh toán...'}</p>
+                            {!zalopayNeedsReconciliation && (secondsLeft === null || secondsLeft > 0) && zalopayCheckout.qrCode && (
+                                <MaQrZalopay value={zalopayCheckout.qrCode} />
+                            )}
+                            {!zalopayNeedsReconciliation && secondsLeft !== null && (
+                                <p className="text-xs font-semibold text-[#124E35]">
+                                    Thời gian còn lại: {Math.floor(secondsLeft / 60)}:{String(secondsLeft % 60).padStart(2, '0')}
+                                </p>
+                            )}
+                            {!zalopayNeedsReconciliation && (secondsLeft === null || secondsLeft > 0) && zalopayCheckout.paymentUrl && (
+                                <a href={zalopayCheckout.paymentUrl} target="_blank" rel="noopener noreferrer"
+                                    className="inline-block rounded-lg border border-[#124E35] px-4 py-2 text-xs font-semibold text-[#124E35]">
+                                    Mở ZaloPay bằng liên kết
+                                </a>
+                            )}
+                            {secondsLeft === 0 && !zalopayNeedsReconciliation && (
+                                <p className="text-xs font-semibold text-amber-800">QR đã hết thời gian hiệu lực. Không quét tiếp; chờ Backend kiểm tra và đối soát.</p>
+                            )}
+                            <p className="text-[11px] text-neutral-600 leading-relaxed">
+                                QR gắn với giao dịch ZaloPay Sandbox đã được Backend tạo, không phải QR minh họa.
+                                Hệ thống kiểm tra kết quả tự động; chỉ xác nhận thành công khi Backend ghi nhận thanh toán.
+                                Không quét hay thanh toán thêm nếu đã trả tiền.
+                            </p>
+                            {zalopayNeedsReconciliation && (
+                                <p className="text-xs font-semibold text-amber-800">Giao dịch cần đối soát. Không tạo thanh toán mới cho cùng đơn.</p>
+                            )}
+                        </section>
+                    )}
 
                     <button
                         type="button"
                         onClick={onConfirmPay}
-                        disabled={checkoutLoading || cartLines.length === 0}
+                        disabled={checkoutLoading || !!zalopayCheckout || cartLines.length === 0}
                         className="w-full py-3 bg-[#124E35] text-[#F5F0E1] font-semibold text-sm rounded-lg cursor-pointer hover:opacity-95 disabled:bg-neutral-200 disabled:text-neutral-400 transition-colors"
                     >
                         {checkoutLoading
                             ? 'Đang xử lý giao dịch...'
+                            : zalopayCheckout ? 'Đang chờ xác nhận từ ZaloPay'
                             : finalPayable === 0 ? 'Xác nhận đơn 0đ (không qua cổng thanh toán)' : `Xác nhận thanh toán · ${formatPrice(finalPayable)}`}
                     </button>
                 </div>

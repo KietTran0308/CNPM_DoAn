@@ -78,9 +78,9 @@ export default function ZalopayResultPage() {
         <h1 className="text-2xl font-bold text-[#124E35]">Kết quả thanh toán ZaloPay</h1>
         <p className="my-6 text-[#333]">{message}</p>
         {state === 'checking' && <p aria-live="polite">Đang xử lý...</p>}
-        {state === 'unknown' && resumeQr && <Link href={`/payment-qr?orderId=${encodeURIComponent(resumeQr)}`}
+        {state === 'unknown' && resumeQr && <Link href={`/?resumeZalopay=${encodeURIComponent(resumeQr)}`}
           className="inline-block rounded-lg border border-[#124E35] px-5 py-3 mr-2 text-[#124E35]">
-          Hiện lại QR của giao dịch
+          Về trang Thanh toán để hiện lại QR
         </Link>}
         {state === 'unknown' && !resumeQr && resumeUrl && <a href={resumeUrl}
           className="inline-block rounded-lg border border-[#124E35] px-5 py-3 mr-2 text-[#124E35]">
