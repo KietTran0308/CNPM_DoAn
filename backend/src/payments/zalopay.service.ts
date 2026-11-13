@@ -110,8 +110,17 @@ export class ZalopayService {
      */
     private decodeOrderUrl(raw: string): { value: string; format: string } {
         let value = raw.trim();
-        // Một số response có ký tự vô hình ở ĐẦU/CUỐI chuỗi (ZWSP, ZWNJ, ZWJ, WORD JOINER,
-        // BOM, LRM/RLM, NBSP, ký tự điều khiển...). Chỉ xóa ở hai đầu, không xóa ở giữa URL.
+
+        const cleanIdx = value.indexOf('https://sbgateway.zalopay.vn');
+        if (cleanIdx > 0) {
+            value = value.substring(cleanIdx);
+        } else {
+            const gatewayIdx = value.indexOf('sbgateway.zalopay.vn');
+            if (gatewayIdx > 0 && gatewayIdx < 10) {
+                value = 'https://' + value.substring(gatewayIdx);
+            }
+        }
+
         const stripped = value.replace(INVISIBLE_EDGE, '');
         const hadInvisibleEdge = stripped !== value;
         value = stripped;
