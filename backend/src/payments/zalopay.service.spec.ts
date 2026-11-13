@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { ZalopayService } from './zalopay.service';
+import { ZalopayService, isValidZalopayQr } from './zalopay.service';
 
 const service = new ZalopayService();
 const originalFetch = global.fetch;
@@ -46,7 +46,7 @@ describe('ZaloPay Sandbox v2 signing', () => {
             appTransId: '261112_abc123456789', userId: 'test-user-123', amount: 90000,
             orderId: 'order-123', expiresAt: new Date(Date.now() + 15 * 60_000),
         });
-        expect(orderUrl).toContain('sbgateway.zalopay.vn');
+        expect(orderUrl.paymentUrl).toContain('sbgateway.zalopay.vn');
         expect(fetchMock).toHaveBeenCalledTimes(1);
     });
 
@@ -92,6 +92,17 @@ describe('ZaloPay Sandbox v2 signing', () => {
 
 // Phản hồi ZaloPay v2 chuẩn vẫn là URL HTTPS. Chỉ khôi phục thêm một lớp
 // mã hóa khi URL cuối cùng thuộc miền ZaloPay; KHÔNG tự dựng URL từ token.
+// Build a test QR with a real EMV CRC; synthetic strings must not be accepted.
+function withQrCrc(prefix: string) {
+    const body = prefix + '6304';
+    let crc = 0xFFFF;
+    for (const ch of body) {
+        crc ^= ch.charCodeAt(0) << 8;
+        for (let i = 0; i < 8; i++) crc = crc & 0x8000 ? ((crc << 1) ^ 0x1021) & 0xFFFF : (crc << 1) & 0xFFFF;
+    }
+    return body + crc.toString(16).toUpperCase().padStart(4, '0');
+}
+
 describe('ZaloPay checkout URL validation', () => {
     const valid = 'https://sbgateway.zalopay.vn/openinapp?order=SANDBOX_TEST_TOKEN';
     const create = () => service.createOrder({
@@ -107,42 +118,42 @@ describe('ZaloPay checkout URL validation', () => {
 
     it('accepts the official absolute HTTPS URL format', async () => {
         gateway(valid);
-        expect(await create()).toBe(valid);
+        expect((await create()).paymentUrl).toBe(valid);
     });
 
     it('supports one layer of percent encoding', async () => {
         gateway(encodeURIComponent(valid));
-        expect(await create()).toBe(valid);
+        expect((await create()).paymentUrl).toBe(valid);
     });
 
     it('supports a double-encoded JSON string', async () => {
         gateway(JSON.stringify(valid));
-        expect(await create()).toBe(valid);
+        expect((await create()).paymentUrl).toBe(valid);
     });
 
     it('supports one extra layer of escaped slashes', async () => {
         gateway(valid.replace(/\//g, '\\/'));
-        expect(await create()).toBe(valid);
+        expect((await create()).paymentUrl).toBe(valid);
     });
 
     it('accepts a gateway domain missing https scheme, without using tokens', async () => {
         gateway('sbgateway.zalopay.vn/openinapp?order=SANDBOX_TEST_TOKEN');
-        expect(await create()).toBe('https://sbgateway.zalopay.vn/openinapp?order=SANDBOX_TEST_TOKEN');
+        expect((await create()).paymentUrl).toBe('https://sbgateway.zalopay.vn/openinapp?order=SANDBOX_TEST_TOKEN');
     });
 
     it('accepts a protocol-relative URL on a known ZaloPay gateway only', async () => {
         gateway('//qcgateway.zalopay.vn/openinapp?order=SANDBOX_TEST_TOKEN');
-        expect(await create()).toBe('https://qcgateway.zalopay.vn/openinapp?order=SANDBOX_TEST_TOKEN');
+        expect((await create()).paymentUrl).toBe('https://qcgateway.zalopay.vn/openinapp?order=SANDBOX_TEST_TOKEN');
     });
 
     it('accepts exactly two URL encoding layers with official gateway', async () => {
         gateway(encodeURIComponent(encodeURIComponent(valid)));
-        expect(await create()).toBe(valid);
+        expect((await create()).paymentUrl).toBe(valid);
     });
 
     it('accepts a zero-width prefix only when the resulting URL is trusted', async () => {
         gateway('\u200B' + valid);
-        expect(await create()).toBe(valid);
+        expect((await create()).paymentUrl).toBe(valid);
     });
 
     it.each([
@@ -151,12 +162,12 @@ describe('ZaloPay checkout URL validation', () => {
         ['LRE', '‪'], ['NUL', '\u0000'],
     ])('strips a %s invisible character from both ends of a trusted URL', async (_name, ch) => {
         gateway(ch + valid + ch);
-        expect(await create()).toBe(valid);
+        expect((await create()).paymentUrl).toBe(valid);
     });
 
     it('strips several mixed invisible characters before a JSON-quoted URL', async () => {
         gateway('​⁠' + JSON.stringify(valid));
-        expect(await create()).toBe(valid);
+        expect((await create()).paymentUrl).toBe(valid);
     });
 
     it('still rejects an external host hidden behind invisible characters', async () => {
@@ -166,7 +177,7 @@ describe('ZaloPay checkout URL validation', () => {
 
     it('does not remove invisible characters from the middle of the URL', async () => {
         gateway('https://sbgateway.zalopay.vn/open​inapp?order=abc');
-        const url = await create();
+        const url = (await create()).paymentUrl || '';
         expect(url).not.toContain('​');
         expect(url).toContain('%E2%80%8B');
     });
@@ -198,27 +209,35 @@ describe('ZaloPay checkout URL validation', () => {
 
     it('detects when order_url contains the QR payload instead of a payment URL', async () => {
         // Giống mẫu EMVCo 000201...6304XXXX trong phản hồi ZaloPay.
-        const qr = '00020101021226520010vn.zalopay6304CE44';
+        const qr = withQrCrc('00020101021226520010vn.zalopay5204739953037045405690005802VN');
         global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({
             return_code: 1, sub_return_code: 1, order_url: qr, qr_code: qr,
             order_token: 'TOKEN_REDACTED', zp_trans_token: 'TOKEN_REDACTED',
         }) })) as any;
-        await expect(create()).rejects.toThrow('mã QR thay vì URL HTTPS');
+        expect(await create()).toEqual({paymentUrl: null, qrCode: qr});
     });
 
     it('detects a QR-shaped order_url even if qr_code is different', async () => {
-        const qr = '00020101021226520010vn.zalopay6304CE44';
+        const qr = withQrCrc('00020101021226520010vn.zalopay5204739953037045405690005802VN');
         global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({
             return_code: 1, sub_return_code: 1, order_url: qr, qr_code: 'DIFFERENT_QR',
         }) })) as any;
-        await expect(create()).rejects.toThrow('mã QR thay vì URL HTTPS');
+        expect(await create()).toEqual({paymentUrl: null, qrCode: qr});
     });
 
     it('still accepts official order_url when a separate qr_code exists', async () => {
         global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({
             return_code: 1, sub_return_code: 1, order_url: valid,
-            qr_code: '00020101021226520010vn.zalopay6304CE44',
+            qr_code: withQrCrc('00020101021226520010vn.zalopay5204739953037045405690005802VN'),
         }) })) as any;
-        expect(await create()).toBe(valid);
+        const checkout = await create();
+        expect(checkout.paymentUrl).toBe(valid);
+        expect(isValidZalopayQr(checkout.qrCode)).toBe(true);
+    });
+
+    it('does not accept a forged QR with an incorrect CRC', async () => {
+        const real = withQrCrc('00020101021226520010vn.zalopay5204739953037045405690005802VN');
+        gateway(real.slice(0, -4) + '0000');
+        await expect(create()).rejects.toThrow('mã QR không hợp lệ');
     });
 });

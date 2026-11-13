@@ -174,6 +174,7 @@ CREATE TABLE public.payments (
                                  vnp_ip_addr varchar(45),
                                  zp_trans_id varchar(50),
                                  zp_order_url varchar(2048),
+                                 zp_qr_code varchar(2048),
     -- Hoan tien mo phong: 0 neu chua hoan, so tien da hoan neu co.
                                  refunded_amount numeric(12,2) NOT NULL DEFAULT 0,
                                  refunded_at timestamptz,

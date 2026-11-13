@@ -938,15 +938,16 @@ export const api = {
             earnedPoints: Number(data.earnedPoints || 0), isDuplicate: !!data.replay };
     },
     async createZalopayPayment(orderId: string, idempotencyKey: string):
-        Promise<{paymentId: string; orderId: string; status: string; paymentUrl: string}> {
+        Promise<{paymentId: string; orderId: string; status: string; paymentUrl: string | null; qrCode: string | null}> {
         return request('/payments/zalopay', {
             method: 'POST', headers: authHeaders(idempotencyKey),
             body: JSON.stringify({orderId}),
         });
     },
     async getZalopayStatus(orderId: string):
-        Promise<{orderId: string; orderStatus: OrderStatus; requiresReconciliation?: boolean;
-            awaitingGateway?: boolean; payment: {status: string; method: string; paymentUrl?: string | null} | null}> {
+        Promise<{orderId: string; orderStatus: OrderStatus; expiresAt?: string; requiresReconciliation?: boolean;
+            awaitingGateway?: boolean; payment: {status: string; method: string;
+                paymentUrl?: string | null; qrCode?: string | null} | null}> {
         return request(`/payments/zalopay/status?orderId=${encodeURIComponent(orderId)}`,
             {headers: authHeaders()});
     },

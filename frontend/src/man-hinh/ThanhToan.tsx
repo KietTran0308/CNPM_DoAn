@@ -185,7 +185,7 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
 
                                     {walletType === 'ZaloPay' ? (
                                         <div className="rounded-lg border border-[#D5CCB4] bg-[#FBF9F5] p-4 text-xs text-neutral-700">
-                                            Bạn sẽ được chuyển tới trang thanh toán ZaloPay Sandbox qua kết nối HTTPS.
+                                            BrewLite sẽ hiển thị mã QR ZaloPay Sandbox để bạn quét; nếu không có QR sẽ mở cổng thanh toán HTTPS.
                                             Không sử dụng mã QR minh họa làm mã thanh toán thật.
                                         </div>
                                     ) : <div className="pt-1 text-center space-y-2">
@@ -508,7 +508,7 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                     </label>}
                     {DEMO_PAYMENTS && <p className="text-xs text-amber-700">Ví MoMo và thẻ ngân hàng chỉ mô phỏng, không ghi nhận tiền thật.</p>}
                     {finalPayable > 0 && paymentMethod === 'wallet' && walletType === 'ZaloPay' &&
-                        <p className="text-xs text-neutral-600">Bạn sẽ chuyển tới ZaloPay Sandbox. Đơn chỉ thành công khi hệ thống nhận callback xác nhận.</p>}
+                        <p className="text-xs text-neutral-600">Sau khi tạo giao dịch, quét mã QR ZaloPay (hoặc mở cổng HTTPS). Đơn chỉ thành công khi Backend xác nhận thanh toán.</p>}
 
                     <button
                         type="button"

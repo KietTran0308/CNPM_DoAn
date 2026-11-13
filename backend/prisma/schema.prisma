@@ -233,6 +233,7 @@ model Payment {
   vnpIpAddr        String?       @map("vnp_ip_addr") @db.VarChar(45)
   zpTransId        String?       @unique(map: "ux_payments_zp_trans_id") @map("zp_trans_id") @db.VarChar(50)
   zpOrderUrl       String?       @map("zp_order_url") @db.VarChar(2048)
+  zpQrCode         String?       @map("zp_qr_code") @db.VarChar(2048)
   refundedAmount   Decimal       @default(0) @map("refunded_amount") @db.Decimal(12, 2)
   refundedAt       DateTime?     @map("refunded_at") @db.Timestamptz(6)
   createdAt        DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)

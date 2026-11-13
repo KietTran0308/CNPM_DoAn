@@ -700,9 +700,12 @@ function UngDungDatNuoc() {
                 }
                 if (currentGateway.payment?.status === 'PENDING') {
                     // Khôi phục đúng URL đã lưu, không tạo giao dịch/app_trans_id mới.
-                    if (currentGateway.payment.method === 'ZALOPAY' && currentGateway.payment.paymentUrl) {
+                    if (currentGateway.payment.method === 'ZALOPAY' &&
+                        (currentGateway.payment.qrCode || currentGateway.payment.paymentUrl)) {
                         sessionStorage.setItem('brewlite_zalopay_order', orderId);
-                        window.location.assign(currentGateway.payment.paymentUrl);
+                        window.location.assign(currentGateway.payment.qrCode
+                            ? `/payment-qr?orderId=${encodeURIComponent(orderId)}`
+                            : currentGateway.payment.paymentUrl!);
                         return;
                     }
                     throw new Error(currentGateway.awaitingGateway
@@ -713,7 +716,15 @@ function UngDungDatNuoc() {
                 const idempotencyKey = getPaymentKey(orderId, 'ZALOPAY', false);
                 const zalopay = await api.createZalopayPayment(orderId, idempotencyKey);
                 sessionStorage.setItem('brewlite_zalopay_order', orderId);
-                window.location.assign(zalopay.paymentUrl);
+                if (zalopay.status === 'SUCCESS') {
+                    window.location.assign(`/payment-result?orderId=${encodeURIComponent(orderId)}`);
+                } else if (zalopay.qrCode) {
+                    window.location.assign(`/payment-qr?orderId=${encodeURIComponent(orderId)}`);
+                } else if (zalopay.paymentUrl) {
+                    window.location.assign(zalopay.paymentUrl);
+                } else {
+                    throw new Error('ZaloPay đã tạo giao dịch nhưng chưa có QR/URL hợp lệ; nhờ ADMIN đối soát.');
+                }
                 return;
             } else {
                 const methodString = paymentMethod === 'wallet' ? 'WALLET' : 'CARD';
@@ -854,9 +865,12 @@ function UngDungDatNuoc() {
                 throw new Error('ZaloPay đã ghi nhận thanh toán nhưng đơn cần đối soát. KHÔNG thanh toán lại.');
             }
             if (gateway.payment?.status === 'PENDING') {
-                if (gateway.payment.method === 'ZALOPAY' && gateway.payment.paymentUrl) {
+                if (gateway.payment.method === 'ZALOPAY' &&
+                    (gateway.payment.qrCode || gateway.payment.paymentUrl)) {
                     sessionStorage.setItem('brewlite_zalopay_order', orderId);
-                    window.location.assign(gateway.payment.paymentUrl);
+                    window.location.assign(gateway.payment.qrCode
+                        ? `/payment-qr?orderId=${encodeURIComponent(orderId)}`
+                        : gateway.payment.paymentUrl!);
                     return;
                 }
                 throw new Error(gateway.awaitingGateway
@@ -870,7 +884,15 @@ function UngDungDatNuoc() {
                 const idempotencyKey = getPaymentKey(orderId, 'ZALOPAY', false);
                 const payment = await api.createZalopayPayment(orderId, idempotencyKey);
                 sessionStorage.setItem('brewlite_zalopay_order', orderId);
-                window.location.assign(payment.paymentUrl);
+                if (payment.status === 'SUCCESS') {
+                    window.location.assign(`/payment-result?orderId=${encodeURIComponent(orderId)}`);
+                } else if (payment.qrCode) {
+                    window.location.assign(`/payment-qr?orderId=${encodeURIComponent(orderId)}`);
+                } else if (payment.paymentUrl) {
+                    window.location.assign(payment.paymentUrl);
+                } else {
+                    throw new Error('ZaloPay chưa trả QR/URL hợp lệ; vui lòng nhờ ADMIN đối soát.');
+                }
                 return;
             } else {
                 if (process.env.NEXT_PUBLIC_ENABLE_DEMO_PAYMENTS !== 'true') {

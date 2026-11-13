@@ -289,16 +289,16 @@ export class PaymentsService {
         if (payment.status !== PaymentStatus.PENDING) {
             throw new ConflictException('Giao dịch đã có kết quả, xem lịch sử đơn');
         }
-        if (payment.zpOrderUrl) {
+        if (payment.zpOrderUrl || payment.zpQrCode) {
             return { paymentId: payment.id, orderId, amount: Number(payment.amount),
-                status: payment.status, paymentUrl: payment.zpOrderUrl };
+                status: payment.status, paymentUrl: payment.zpOrderUrl, qrCode: payment.zpQrCode };
         }
         if (!wasCreated) {
             throw new ConflictException('Giao dịch ZaloPay đang chờ xác minh. Không tạo yêu cầu mới; hãy đối soát.');
         }
-        let paymentUrl: string;
+        let checkout: { paymentUrl: string | null; qrCode: string | null };
         try {
-            paymentUrl = await this.zalopayService.createOrder({
+            checkout = await this.zalopayService.createOrder({
                 appTransId: payment.providerRef!, userId, amount: Number(payment.amount),
                 orderId, expiresAt: payment.order.expiresAt,
             });
@@ -308,7 +308,7 @@ export class PaymentsService {
             // Cho phép sửa cấu hình rồi tạo giao dịch mới, nhưng không xóa dấu vết cũ.
             await this.prisma.$transaction(async tx => {
                 const changed = await tx.payment.updateMany({
-                    where: { id: payment.id, status: PaymentStatus.PENDING, zpOrderUrl: null },
+                    where: { id: payment.id, status: PaymentStatus.PENDING, zpOrderUrl: null, zpQrCode: null },
                     data: { status: PaymentStatus.FAILED },
                 });
                 if (changed.count !== 1) {
@@ -330,12 +330,17 @@ export class PaymentsService {
                     : `ZaloPay từ chối tạo đơn (mã ${error.subReturnCode}). Kiểm tra AppID, dữ liệu và cấu hình Sandbox.`,
             );
         }
-        // Không đánh dấu FAILED nếu lưu URL lỗi: giao dịch gateway có thể vẫn còn tồn tại.
+        // Store the verified checkout QR separately from the checkout URL.
+        // A concurrent successful callback can already have changed status to SUCCESS;
+        // never overwrite it or turn it back into PENDING.
         await this.prisma.payment.updateMany({
-            where: { id: payment.id, status: PaymentStatus.PENDING }, data: { zpOrderUrl: paymentUrl },
+            where: { id: payment.id, status: PaymentStatus.PENDING },
+            data: { zpOrderUrl: checkout.paymentUrl, zpQrCode: checkout.qrCode },
         });
+        const current = await this.prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
         return { paymentId: payment.id, orderId, amount: Number(payment.amount),
-            status: PaymentStatus.PENDING, paymentUrl };
+            status: current.status, paymentUrl: current.status === PaymentStatus.PENDING ? current.zpOrderUrl : null,
+            qrCode: current.status === PaymentStatus.PENDING ? current.zpQrCode : null };
     }
 
     private async finalizeConfirmedZalopay(orderId: string) {
@@ -389,7 +394,7 @@ export class PaymentsService {
         return this.prisma.payment.findMany({ where: { method: { in: [PaymentMethod.ZALOPAY, PaymentMethod.VNPAY] }, OR: [
                     // Không có URL sau 2 phút: có thể create API timeout, cần xem sớm hơn 25 phút.
                     { method: PaymentMethod.ZALOPAY, status: PaymentStatus.PENDING,
-                        zpOrderUrl: null, createdAt: { lt: createTimeout } },
+                        zpOrderUrl: null, zpQrCode: null, createdAt: { lt: createTimeout } },
                     { status: PaymentStatus.PENDING, createdAt: { lt: cutoff } },
                     { status: PaymentStatus.SUCCESS,
                         order: { status: { in: [OrderStatus.PENDING, OrderStatus.PAYMENT_FAILED, OrderStatus.CANCELLED] } } },
@@ -442,7 +447,7 @@ export class PaymentsService {
         // đã quá 30 phút và đơn đã hết hạn. Không kết luận thất bại nếu còn trong
         // cửa sổ xử lý, vì QueryDR -101 có thể xuất hiện khi tạo đơn timeout.
         const oldMissingGatewayOrder = gateway.returnCode === 2 && gateway.subReturnCode === -101 &&
-            !gateway.isProcessing && payment.zpOrderUrl === null &&
+            !gateway.isProcessing && payment.zpOrderUrl == null && payment.zpQrCode == null &&
             payment.createdAt instanceof Date && payment.createdAt.getTime() < Date.now() - 30 * 60_000 &&
             payment.order.expiresAt <= new Date();
         if (gateway.returnCode === 2 &&
@@ -485,7 +490,7 @@ export class PaymentsService {
         });
         if (!order) throw new NotFoundException('Không tìm thấy đơn hàng');
         const payment = order.payments[0];
-        return { orderId: order.id, orderStatus: order.status,
+        return { orderId: order.id, orderStatus: order.status, expiresAt: order.expiresAt,
             requiresReconciliation: payment?.status === PaymentStatus.SUCCESS &&
                 (order.status === OrderStatus.PENDING ||
                     order.status === OrderStatus.PAYMENT_FAILED ||
@@ -493,7 +498,7 @@ export class PaymentsService {
             awaitingGateway: payment?.status === PaymentStatus.PENDING && (
                 payment.createdAt.getTime() < Date.now() - 25 * 60_000 ||
                 order.expiresAt <= new Date() ||
-                (payment.method === PaymentMethod.ZALOPAY && !payment.zpOrderUrl &&
+                (payment.method === PaymentMethod.ZALOPAY && !payment.zpOrderUrl && !payment.zpQrCode &&
                     payment.createdAt.getTime() < Date.now() - 2 * 60_000)
             ),
             payment: payment ? {
@@ -502,6 +507,9 @@ export class PaymentsService {
                 paymentUrl: payment.method === PaymentMethod.ZALOPAY &&
                 payment.status === PaymentStatus.PENDING && order.expiresAt > new Date()
                     ? payment.zpOrderUrl : null,
+                qrCode: payment.method === PaymentMethod.ZALOPAY &&
+                payment.status === PaymentStatus.PENDING && order.expiresAt > new Date()
+                    ? payment.zpQrCode : null,
             } : null };
     }
 }

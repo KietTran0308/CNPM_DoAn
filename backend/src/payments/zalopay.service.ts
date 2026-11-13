@@ -15,6 +15,24 @@ const INVISIBLE_EDGE = /^[\p{Cf}\p{Cc}\p{Z}]+|[\p{Cf}\p{Cc}\p{Z}]+$/gu;
 const codePointLabel = (char: string) =>
     'U+' + (char.codePointAt(0) ?? 0).toString(16).toUpperCase().padStart(4, '0');
 
+export type ZalopayCheckout = { paymentUrl: string | null; qrCode: string | null };
+
+// EMVCo QR Code: validate payload prefix, ZaloPay marker and CRC-16/CCITT-FALSE.
+// Never construct a checkout URL from qr_code/order_token/zp_trans_token.
+export function isValidZalopayQr(value: unknown): value is string {
+    if (typeof value !== 'string' || value.length < 40 || value.length > 2048 ||
+        !/^000201/.test(value) || !/vn\.zalopay/i.test(value) ||
+        !/6304[0-9A-F]{4}$/i.test(value) || /[^\x20-\x7E]/.test(value)) return false;
+    let crc = 0xFFFF;
+    for (let index = 0; index < value.length - 4; index++) {
+        crc ^= value.charCodeAt(index) << 8;
+        for (let bit = 0; bit < 8; bit++) {
+            crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xFFFF : (crc << 1) & 0xFFFF;
+        }
+    }
+    return crc.toString(16).toUpperCase().padStart(4, '0') === value.slice(-4).toUpperCase();
+}
+
 export type ZaloCallback = { data: string; mac: string; type?: number };
 export type ZaloCallbackData = {
     app_id: number; app_trans_id: string; amount: number; zp_trans_id: number | string;
@@ -211,7 +229,7 @@ export class ZalopayService {
 
     async createOrder(input: {
         appTransId: string; userId: string; amount: number; orderId: string; expiresAt: Date;
-    }): Promise<string> {
+    }): Promise<ZalopayCheckout> {
         const cfg = this.config();
         if (!Number.isSafeInteger(input.amount) || input.amount <= 0) {
             throw new InternalServerErrorException('ZaloPay chỉ nhận số tiền nguyên VND lớn hơn 0');
@@ -267,74 +285,60 @@ export class ZalopayService {
                 `sub_return_code=${String(result.sub_return_code ?? '?')}). Cần đối soát trước khi thử lại`,
             );
         }
-        // return_code=1 chỉ nghĩa là cổng đã tạo đơn. Không được kết luận
-        // thanh toán thành công khi thiếu/không đọc được order_url.
-        const rawOrderUrl = result.order_url;
-        const orderUrl = typeof rawOrderUrl === 'string' ? rawOrderUrl.trim() : '';
-        const qrCode = typeof result.qr_code === 'string' ? result.qr_code.trim() : '';
-        const decoded = this.decodeOrderUrl(orderUrl);
-
-        // EMVCo/VietQR thường có mẫu 000201...6304XXXX (CRC ở cuối).
-        // Chỉ phân loại lỗi, không đưa QR vào paymentUrl và không tự chế URL từ token.
-        const orderUrlEqualsQrCode = qrCode.length > 0 && orderUrl === qrCode;
-        const orderUrlLooksLikeEmvQr = /^000201/.test(orderUrl) &&
-            /6304[0-9A-F]{4}$/i.test(orderUrl) && /vn\.zalopay/i.test(orderUrl);
-
-        // Chỉ ghi metadata; tuyệt đối không ghi raw order_url, qr_code hoặc token lên Render.
+        // return_code=1 means "order created", NOT "payment received".
+        // ZaloPay exposes both a gateway URL and an EMV QR field; a few sandbox
+        // responses put the QR payload into order_url. Treat that as a QR, not a URL.
+        const rawOrderUrl = typeof result.order_url === 'string' ? result.order_url.trim() : '';
+        const rawQr = typeof result.qr_code === 'string' ? result.qr_code.trim() : '';
+        const qrCode = isValidZalopayQr(rawQr) ? rawQr :
+            isValidZalopayQr(rawOrderUrl) ? rawOrderUrl : null;
+        const isQrOrderUrl = isValidZalopayQr(rawOrderUrl);
+        const decoded = this.decodeOrderUrl(rawOrderUrl);
+        let paymentUrl: string | null = null;
         const diagnostics = {
             returnCode: result.return_code,
             subReturnCode: result.sub_return_code ?? null,
-            urlType: typeof rawOrderUrl,
-            urlLength: orderUrl.length,
+            urlType: typeof result.order_url,
+            urlLength: rawOrderUrl.length,
             urlFormat: decoded.format,
-            ...this.safeOrderUrlDiagnostics(orderUrl),
-            hasOrderToken: typeof result.order_token === 'string' && result.order_token.length > 0,
-            hasZpTransToken: typeof result.zp_trans_token === 'string' && result.zp_trans_token.length > 0,
-            hasQrCode: qrCode.length > 0,
-            orderUrlEqualsQrCode,
-            orderUrlLooksLikeEmvQr,
+            ...this.safeOrderUrlDiagnostics(rawOrderUrl),
+            hasQrCode: rawQr.length > 0,
+            orderUrlEqualsQrCode: Boolean(rawQr && rawQr === rawOrderUrl),
+            orderUrlLooksLikeEmvQr: isQrOrderUrl,
+            qrValidated: Boolean(qrCode),
         };
-        if (!orderUrl) {
-            this.logger.warn(JSON.stringify({ event: 'ZALOPAY_CREATE_MISSING_ORDER_URL', ...diagnostics }));
+        if (rawOrderUrl && !isQrOrderUrl) {
+            let url: URL | null = null;
+            try { url = new URL(decoded.value); } catch { /* can still use valid QR */ }
+            if (url) {
+                // Deny unknown hosts; never forward untrusted URLs to users.
+                if (url.protocol !== 'https:' ||
+                    !(url.hostname === 'zalopay.vn' || url.hostname.endsWith('.zalopay.vn')) ||
+                    Boolean(url.username || url.password) || (url.port !== '' && url.port !== '443')) {
+                    if (!qrCode) {
+                        this.logger.warn(JSON.stringify({ event: 'ZALOPAY_CREATE_UNTRUSTED_ORDER_URL',
+                            ...diagnostics, hostname: url.hostname, protocol: url.protocol }));
+                        throw new ServiceUnavailableException(
+                            'ZaloPay trả địa chỉ thanh toán không được phép. Giao dịch cần đối soát; không tạo lại ngay.',
+                        );
+                    }
+                } else {
+                    paymentUrl = url.toString();
+                }
+            }
+        }
+        if (!paymentUrl && !qrCode) {
+            this.logger.warn(JSON.stringify({ event: 'ZALOPAY_CREATE_INVALID_CHECKOUT', ...diagnostics }));
             throw new ServiceUnavailableException(
-                'ZaloPay báo tạo đơn thành công nhưng thiếu đường dẫn thanh toán. Giao dịch cần đối soát; không tạo lại ngay.',
+                'ZaloPay trả URL thanh toán sai định dạng hoặc mã QR không hợp lệ. Giao dịch cần đối soát; không tạo lại ngay.',
             );
         }
-        if (orderUrlEqualsQrCode || orderUrlLooksLikeEmvQr) {
-            this.logger.warn(JSON.stringify({ event: 'ZALOPAY_CREATE_ORDER_URL_IS_QR_PAYLOAD', ...diagnostics }));
-            throw new ServiceUnavailableException(
-                'ZaloPay trả nội dung mã QR thay vì URL HTTPS trong order_url. ' +
-                'Giao dịch đã được tạo và cần đối soát; không tạo lại ngay.',
-            );
+        if (qrCode && !paymentUrl) {
+            this.logger.log(JSON.stringify({ event: 'ZALOPAY_CREATE_QR_CHECKOUT',
+                appTransIdLength: input.appTransId.length, qrLength: qrCode.length,
+                orderUrlEqualsQrCode: diagnostics.orderUrlEqualsQrCode }));
         }
-        let url: URL;
-        try {
-            url = new URL(decoded.value);
-        } catch {
-            this.logger.warn(JSON.stringify({ event: 'ZALOPAY_CREATE_INVALID_ORDER_URL', ...diagnostics }));
-            throw new ServiceUnavailableException(
-                'ZaloPay trả về URL thanh toán sai định dạng. Giao dịch cần đối soát; không tạo lại ngay.',
-            );
-        }
-        // Chỉ cho phép HTTPS thuộc tên miền thật của ZaloPay. Không theo redirect,
-        // không chấp nhận userinfo, HTTP hay host ngoài ZaloPay.
-        if (url.protocol !== 'https:' ||
-            !(url.hostname === 'zalopay.vn' || url.hostname.endsWith('.zalopay.vn')) ||
-            Boolean(url.username || url.password) || (url.port !== '' && url.port !== '443')) {
-            this.logger.warn(JSON.stringify({
-                event: 'ZALOPAY_CREATE_UNTRUSTED_ORDER_URL', ...diagnostics,
-                hostname: url.hostname, protocol: url.protocol,
-            }));
-            throw new ServiceUnavailableException(
-                'ZaloPay trả về địa chỉ thanh toán không được phép. Giao dịch cần đối soát; không tạo lại ngay.',
-            );
-        }
-        if (decoded.format !== 'absolute-https') {
-            this.logger.log(JSON.stringify({
-                event: 'ZALOPAY_CREATE_URL_NORMALIZED', format: decoded.format, hostname: url.hostname,
-            }));
-        }
-        return url.toString();
+        return { paymentUrl, qrCode };
     }
 
     verifyCallback(body: ZaloCallback): ZaloCallbackData | null {

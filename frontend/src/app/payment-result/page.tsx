@@ -11,6 +11,7 @@ export default function ZalopayResultPage() {
   const [state, setState] = useState<State>('checking');
   const [message, setMessage] = useState('Đang xác nhận thanh toán với máy chủ...');
   const [resumeUrl, setResumeUrl] = useState<string | null>(null);
+  const [resumeQr, setResumeQr] = useState<string | null>(null);
   const clearCart = useGioHang(s => s.clearCart);
 
   useEffect(() => {
@@ -37,9 +38,12 @@ export default function ZalopayResultPage() {
           clearCart();
           return;
         }
-        if (result.payment?.status === 'PENDING' && result.payment.method === 'ZALOPAY'
-            && result.payment.paymentUrl) setResumeUrl(result.payment.paymentUrl);
-        else setResumeUrl(null);
+        if (result.payment?.status === 'PENDING' && result.payment.method === 'ZALOPAY') {
+          setResumeUrl(result.payment.paymentUrl || null);
+          setResumeQr(result.payment.qrCode ? orderId : null);
+        } else {
+          setResumeUrl(null); setResumeQr(null);
+        }
         if (result.requiresReconciliation) {
           setState('unknown');
           setMessage('ZaloPay đã báo nhận tiền nhưng cửa hàng chưa hoàn tất đơn. KHÔNG thanh toán lần nữa; hãy liên hệ quản trị viên để đối soát hoặc hoàn tiền.');
@@ -74,7 +78,11 @@ export default function ZalopayResultPage() {
         <h1 className="text-2xl font-bold text-[#124E35]">Kết quả thanh toán ZaloPay</h1>
         <p className="my-6 text-[#333]">{message}</p>
         {state === 'checking' && <p aria-live="polite">Đang xử lý...</p>}
-        {state === 'unknown' && resumeUrl && <a href={resumeUrl}
+        {state === 'unknown' && resumeQr && <Link href={`/payment-qr?orderId=${encodeURIComponent(resumeQr)}`}
+          className="inline-block rounded-lg border border-[#124E35] px-5 py-3 mr-2 text-[#124E35]">
+          Hiện lại QR của giao dịch
+        </Link>}
+        {state === 'unknown' && !resumeQr && resumeUrl && <a href={resumeUrl}
           className="inline-block rounded-lg border border-[#124E35] px-5 py-3 mr-2 text-[#124E35]">
           Mở lại ZaloPay (cùng giao dịch)
         </a>}
