@@ -98,6 +98,54 @@ export class ZalopayService {
         return json as Record<string, unknown>;
     }
 
+    /**
+     * Chỉ khôi phục MỘT lớp mã hóa của một URL HTTPS từ chính phản hồi ZaloPay.
+     * Không tự tạo URL từ order_token / zp_trans_token (không có đặc tả bảo đảm).
+     * URL sau khôi phục vẫn phải qua danh sách domain tin cậy ở createOrder().
+     */
+    private decodeOrderUrl(raw: string): { value: string; format: string } {
+        const original = raw.trim();
+        if (/^https:\/\//i.test(original)) return { value: original, format: 'absolute-https' };
+
+        // Đôi khi bên trung gian JSON-encode thêm lần nữa: '"https://..."'.
+        // Chỉ hỗ trợ giá trị JSON string trọn vẹn, không xử lý JSON/object tùy ý.
+        if (original.startsWith('"') && original.endsWith('"')) {
+            try {
+                const decoded: unknown = JSON.parse(original);
+                if (typeof decoded === 'string' && /^https:\/\//i.test(decoded)) {
+                    return { value: decoded, format: 'json-quoted-https' };
+                }
+            } catch { /* Không phải chuỗi JSON hợp lệ. */ }
+        }
+
+        // Một số lớp trung gian có thể escape dấu / thêm lần nữa.
+        if (original.startsWith('https:') && original.includes('\\/')) {
+            const decoded = original.replaceAll('\\/', '/');
+            if (/^https:\/\//i.test(decoded)) {
+                return { value: decoded, format: 'escaped-https' };
+            }
+        }
+
+        // Toàn bộ URL đôi khi bị URL-encode, ví dụ https%3A%2F%2F...
+        if (/^https%3a%2f%2f/i.test(original)) {
+            try {
+                const decoded = decodeURIComponent(original);
+                if (/^https:\/\//i.test(decoded)) {
+                    return { value: decoded, format: 'percent-encoded-https' };
+                }
+            } catch { /* Dữ liệu phần trăm không hợp lệ. */ }
+        }
+
+        // Dấu hiệu hữu ích nhưng KHÔNG dùng để tự chế một liên kết thanh toán.
+        const format = original.startsWith('http://') ? 'http-not-https'
+            : original.startsWith('//') ? 'protocol-relative'
+                : /^https?:\\\/\\\//i.test(original) ? 'escaped-slashes'
+                    : /^[a-z][a-z0-9+.-]*:/i.test(original) ? 'other-scheme'
+                        : /^[A-Za-z0-9_+\/=-]+$/.test(original) ? 'token-like'
+                            : original.startsWith('<') ? 'html-like' : 'unknown';
+        return { value: original, format };
+    }
+
     async createOrder(input: {
         appTransId: string; userId: string; amount: number; orderId: string; expiresAt: Date;
     }): Promise<string> {
@@ -156,51 +204,54 @@ export class ZalopayService {
                 `sub_return_code=${String(result.sub_return_code ?? '?')}). Cần đối soát trước khi thử lại`,
             );
         }
-        // ZaloPay có thể trả return_code=1 mà order_url trống/sai định dạng.
-        // Không để new URL() ném TypeError thành HTTP 500. Không đánh dấu thanh toán
-        // FAILED: createOrder đã có thể tạo giao dịch ở gateway và cần đối soát.
+        // return_code=1 chỉ nghĩa là cổng đã tạo đơn. Không được kết luận
+        // thanh toán thành công khi thiếu/không đọc được order_url.
         const rawOrderUrl = result.order_url;
         const orderUrl = typeof rawOrderUrl === 'string' ? rawOrderUrl.trim() : '';
+        const decoded = this.decodeOrderUrl(orderUrl);
+        // Những thuộc tính sau không chứa link thanh toán, token hay khóa bí mật.
+        const diagnostics = {
+            returnCode: result.return_code,
+            subReturnCode: result.sub_return_code ?? null,
+            urlType: typeof rawOrderUrl,
+            urlLength: orderUrl.length,
+            urlFormat: decoded.format,
+            hasOrderToken: typeof result.order_token === 'string' && result.order_token.length > 0,
+            hasZpTransToken: typeof result.zp_trans_token === 'string' && result.zp_trans_token.length > 0,
+            hasQrCode: typeof result.qr_code === 'string' && result.qr_code.length > 0,
+        };
         if (!orderUrl) {
-            this.logger.warn(JSON.stringify({
-                event: 'ZALOPAY_CREATE_INVALID_ORDER_URL',
-                returnCode: result.return_code,
-                subReturnCode: result.sub_return_code ?? null,
-                urlType: typeof rawOrderUrl,
-                urlLength: 0,
-            }));
+            this.logger.warn(JSON.stringify({ event: 'ZALOPAY_CREATE_MISSING_ORDER_URL', ...diagnostics }));
             throw new ServiceUnavailableException(
                 'ZaloPay báo tạo đơn thành công nhưng thiếu đường dẫn thanh toán. Giao dịch cần đối soát; không tạo lại ngay.',
             );
         }
         let url: URL;
         try {
-            url = new URL(orderUrl);
+            url = new URL(decoded.value);
         } catch {
-            // Không in nguyên order_url: có thể chứa mã/token thanh toán.
-            this.logger.warn(JSON.stringify({
-                event: 'ZALOPAY_CREATE_INVALID_ORDER_URL',
-                returnCode: result.return_code,
-                subReturnCode: result.sub_return_code ?? null,
-                urlType: typeof rawOrderUrl,
-                urlLength: orderUrl.length,
-                startsWithHttps: orderUrl.startsWith('https://'),
-            }));
+            this.logger.warn(JSON.stringify({ event: 'ZALOPAY_CREATE_INVALID_ORDER_URL', ...diagnostics }));
             throw new ServiceUnavailableException(
                 'ZaloPay trả về URL thanh toán sai định dạng. Giao dịch cần đối soát; không tạo lại ngay.',
             );
         }
+        // Chỉ cho phép HTTPS thuộc tên miền thật của ZaloPay. Không theo redirect,
+        // không chấp nhận userinfo, HTTP hay host ngoài ZaloPay.
         if (url.protocol !== 'https:' ||
             !(url.hostname === 'zalopay.vn' || url.hostname.endsWith('.zalopay.vn')) ||
             Boolean(url.username || url.password) || (url.port !== '' && url.port !== '443')) {
             this.logger.warn(JSON.stringify({
-                event: 'ZALOPAY_CREATE_UNTRUSTED_ORDER_URL',
-                hostname: url.hostname,
-                protocol: url.protocol,
+                event: 'ZALOPAY_CREATE_UNTRUSTED_ORDER_URL', ...diagnostics,
+                hostname: url.hostname, protocol: url.protocol,
             }));
             throw new ServiceUnavailableException(
                 'ZaloPay trả về địa chỉ thanh toán không được phép. Giao dịch cần đối soát; không tạo lại ngay.',
             );
+        }
+        if (decoded.format !== 'absolute-https') {
+            this.logger.log(JSON.stringify({
+                event: 'ZALOPAY_CREATE_URL_NORMALIZED', format: decoded.format, hostname: url.hostname,
+            }));
         }
         return url.toString();
     }

@@ -89,3 +89,54 @@ describe('ZaloPay Sandbox v2 signing', () => {
     expect(result.returnCode).toBe(3);
   });
 });
+
+// Phản hồi ZaloPay v2 chuẩn vẫn là URL HTTPS. Chỉ khôi phục thêm một lớp
+// mã hóa khi URL cuối cùng thuộc miền ZaloPay; KHÔNG tự dựng URL từ token.
+describe('ZaloPay checkout URL validation', () => {
+  const valid = 'https://sbgateway.zalopay.vn/openinapp?order=SANDBOX_TEST_TOKEN';
+  const create = () => service.createOrder({
+    appTransId: '261113_abc123456789', userId: 'test-user-123', amount: 40000,
+    orderId: 'order-test', expiresAt: new Date(Date.now() + 15 * 60_000),
+  });
+  const gateway = (orderUrl: unknown) => {
+    global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({
+      return_code: 1, sub_return_code: 1, order_url: orderUrl,
+      order_token: 'TOKEN_REDACTED', zp_trans_token: 'TOKEN_REDACTED',
+    }) })) as any;
+  };
+
+  it('accepts the official absolute HTTPS URL format', async () => {
+    gateway(valid);
+    expect(await create()).toBe(valid);
+  });
+
+  it('supports one layer of percent encoding', async () => {
+    gateway(encodeURIComponent(valid));
+    expect(await create()).toBe(valid);
+  });
+
+  it('supports a double-encoded JSON string', async () => {
+    gateway(JSON.stringify(valid));
+    expect(await create()).toBe(valid);
+  });
+
+  it('supports one extra layer of escaped slashes', async () => {
+    gateway(valid.replace(/\//g, '\\/'));
+    expect(await create()).toBe(valid);
+  });
+
+  it('rejects a percent-encoded external URL', async () => {
+    gateway(encodeURIComponent('https://attacker.example/pay?order=abc'));
+    await expect(create()).rejects.toThrow('địa chỉ thanh toán không được phép');
+  });
+
+  it('rejects a URL that has credentials embedded', async () => {
+    gateway('https://user:pass@sbgateway.zalopay.vn/openinapp?order=abc');
+    await expect(create()).rejects.toThrow('địa chỉ thanh toán không được phép');
+  });
+
+  it('does not create a URL from a gateway token', async () => {
+    gateway('SANDBOX_TEST_TOKEN');
+    await expect(create()).rejects.toThrow('URL thanh toán sai định dạng');
+  });
+});
