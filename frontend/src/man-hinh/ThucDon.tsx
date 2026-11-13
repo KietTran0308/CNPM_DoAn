@@ -215,6 +215,8 @@ export const ThucDon: React.FC<ThucDonProps> = ({
                                                     <img
                                                         src={duongDanAnh}
                                                         alt={item.name}
+                                                        loading="lazy"
+                                                        decoding="async"
                                                         referrerPolicy="no-referrer"
                                                         onError={(e) => {
                                                             if (anhDuPhong && !e.currentTarget.src.endsWith(anhDuPhong)) {

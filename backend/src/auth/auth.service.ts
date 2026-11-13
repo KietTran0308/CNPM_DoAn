@@ -6,7 +6,7 @@ import { createHash } from 'node:crypto';
 
 const USER_SELECT = {
     id: true, email: true, fullName: true, phone: true, avatar: true,
-    favoriteBranch: true, role: true, loyaltyPoints: true, createdAt: true
+    favoriteBranch: true, role: true, loyaltyPoints: true, reservedPoints: true, createdAt: true
 } as const;
 
 @Injectable()
@@ -20,6 +20,7 @@ export class AuthService {
         fullName: string;
         role: string;
         loyaltyPoints: number;
+        reservedPoints: number;
         passwordHash: string;
         phone?: string | null;
         avatar?: string | null;
@@ -28,8 +29,9 @@ export class AuthService {
         // pv gan token voi password hash hien hanh; doi mat khau lam JWT cu het hieu luc.
         const pv = createHash('sha256').update(user.passwordHash).digest('hex');
         const token = this.jwt.sign({sub: user.id, email: user.email, role: user.role, pv});
-        const {id, email, fullName, role, loyaltyPoints, phone, avatar, favoriteBranch} = user;
-        return {token, user: {id, email, fullName, role, loyaltyPoints, phone, avatar, favoriteBranch}};
+        const {id, email, fullName, role, loyaltyPoints, reservedPoints, phone, avatar, favoriteBranch} = user;
+        return {token, user: {id, email, fullName, role, loyaltyPoints,
+            availablePoints: loyaltyPoints - reservedPoints, phone, avatar, favoriteBranch}};
     }
 
     async register(fullName: string, email: string, password: string, phone?: string) {
@@ -58,7 +60,7 @@ export class AuthService {
     async getMe(id: string) {
         const user = await this.prisma.user.findUnique({where: {id}, select: USER_SELECT});
         if (!user) throw new UnauthorizedException('Tài khoản không tồn tại');
-        return user;
+        return { ...user, availablePoints: user.loyaltyPoints - user.reservedPoints };
     }
 
     async updateProfile(id: string, data: {
@@ -77,7 +79,7 @@ export class AuthService {
         if (avatar && !/^https:\/\//i.test(avatar) && !avatar.startsWith('/images/')) {
             throw new BadRequestException('Ảnh đại diện phải là URL HTTPS hoặc đường dẫn /images/');
         }
-        return this.prisma.user.update({
+        const updated = await this.prisma.user.update({
             where: {id},
             data: {
                 ...(fullName !== undefined ? {fullName} : {}),
@@ -90,6 +92,7 @@ export class AuthService {
                     : {}),
             }, select: USER_SELECT
         });
+        return { ...updated, availablePoints: updated.loyaltyPoints - updated.reservedPoints };
     }
 
     async changePassword(id: string, currentPassword: string, newPassword: string) {

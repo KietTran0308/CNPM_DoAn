@@ -194,6 +194,7 @@ export interface User {
     phone?: string;
     role?: 'CUSTOMER' | 'STAFF' | 'ADMIN' | string;
     loyaltyPoints: number;
+    availablePoints?: number;
     avatar?: string | null;
     favoriteBranch?: string | null;
     createdAt?: string;
@@ -202,10 +203,13 @@ export interface User {
 export interface Order {
     paidWithZalopay?: boolean;
     pendingZalopay?: boolean;
+    simulatedRefundAmount?: number;
+    simulatedRefundAt?: string | null;
     id: string;
     orderCode?: number;
     userId: string;
     couponId?: string;
+    couponCode?: string;
     status: OrderStatus;
     subtotal?: number;
     discountAmount?: number;
@@ -658,6 +662,8 @@ export function mapUser(raw: any): User {
         phone: raw.phone,
         role: raw.role || 'CUSTOMER',
         loyaltyPoints: Number(raw.loyaltyPoints ?? raw.loyalty_points ?? 0),
+        availablePoints: Number(raw.availablePoints ??
+            (Number(raw.loyaltyPoints ?? raw.loyalty_points ?? 0) - Number(raw.reservedPoints ?? raw.reserved_points ?? 0))),
         avatar: raw.avatar || raw.avatarUrl || raw.avatar_url || null,
         favoriteBranch: raw.favoriteBranch || raw.favorite_branch || null,
         createdAt: raw.createdAt || raw.created_at || new Date().toISOString(),
@@ -702,9 +708,17 @@ export function mapOrder(raw: any): Order {
         pendingZalopay: Array.isArray(raw.payments) && raw.payments.some(
             (payment: any) => ['ZALOPAY', 'VNPAY'].includes(payment.method) && payment.status === 'PENDING',
         ),
+        // Sổ hoàn tiền DEMO nội bộ. KHÔNG đồng nghĩa đã nhận tiền từ ZaloPay Refund API.
+        simulatedRefundAmount: Array.isArray(raw.payments)
+            ? raw.payments.reduce((sum: number, p: any) => sum + Number(p.refundedAmount ?? 0), 0)
+            : undefined,
+        simulatedRefundAt: Array.isArray(raw.payments)
+            ? raw.payments.find((p: any) => Number(p.refundedAmount ?? 0) > 0)?.refundedAt ?? null
+            : undefined,
         orderCode: raw.orderCode || raw.order_code ? Number(raw.orderCode || raw.order_code) : undefined,
         userId: String(raw.userId || raw.user_id || 'usr_me'),
         couponId: raw.couponId || raw.coupon_id || undefined,
+        couponCode: typeof raw.coupon?.code === 'string' ? raw.coupon.code : undefined,
         status: (raw.status as OrderStatus) || 'PENDING',
         subtotal: raw.subtotal !== undefined ? Number(raw.subtotal) : undefined,
         discountAmount:
@@ -727,6 +741,7 @@ export function mapOrder(raw: any): Order {
                         ? Number(raw.points_discount)
                         : undefined,
         total: Number(raw.total ?? raw.total_amount ?? 0),
+        expiresAt: raw.expiresAt ?? raw.expires_at ?? undefined,
         createdAt: String(raw.createdAt || raw.created_at || new Date().toISOString()),
         items,
     };
@@ -821,6 +836,14 @@ export const setStoredUser = (user: User | null): void => {
     } catch {}
 };
 
+// Phân biệt đăng nhập không hợp lệ (401/403) với timeout lúc Render khởi động.
+export class ApiHttpError extends Error {
+    constructor(public readonly status: number, message: string) {
+        super(message);
+        this.name = 'ApiHttpError';
+    }
+}
+
 // Mọi API dưới đây kết nối NestJS thật; lỗi mạng KHÔNG tạo đơn/thanh toán giả.
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const controller = new AbortController();
@@ -833,7 +856,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
         const data = await response.json().catch(() => ({}));
         if (!response.ok) {
             const message = Array.isArray(data.message) ? data.message.join(', ') : data.message;
-            throw new Error(message || `API ${path}: HTTP ${response.status}`);
+            throw new ApiHttpError(response.status, message || `API ${path}: HTTP ${response.status}`);
         }
         return data as T;
     } finally { clearTimeout(timeout); }
@@ -858,6 +881,8 @@ export interface StockIngredient {
     name: string;
     unit: string;
     stockQuantity: number;
+    reservedQuantity: number;
+    availableQuantity: number;
     minStockQuantity: number;
 }
 export interface ReconciliationPayment {
@@ -868,6 +893,23 @@ export interface ReconciliationPayment {
     amount: number;
     status: 'PENDING' | 'SUCCESS' | 'FAILED';
     order: { orderCode: number; status: OrderStatus; total: number };
+}
+
+export interface ZalopayStatusResult {
+    orderId: string;
+    orderStatus: OrderStatus;
+    expiresAt?: string;
+    requiresReconciliation?: boolean;
+    awaitingGateway?: boolean;
+    verification?: {
+        outcome: 'SUCCESS' | 'PENDING' | 'NOT_CONFIRMED' | 'CONFIG_ERROR' |
+            'ERROR' | 'RATE_LIMITED' | 'NEEDS_RECONCILIATION' | 'ALREADY_FINAL';
+        queried: boolean;
+        returnCode?: number;
+        subReturnCode?: number | null;
+        retryAfterSeconds?: number;
+    };
+    payment: { status: string; method: string; paymentUrl?: string | null; qrCode?: string | null } | null;
 }
 
 export const api = {
@@ -938,18 +980,20 @@ export const api = {
             earnedPoints: Number(data.earnedPoints || 0), isDuplicate: !!data.replay };
     },
     async createZalopayPayment(orderId: string, idempotencyKey: string):
-        Promise<{paymentId: string; orderId: string; status: string; paymentUrl: string | null; qrCode: string | null}> {
+        Promise<{paymentId: string; orderId: string; status: string; paymentUrl: string | null; qrCode: string | null; expiresAt?: string | null}> {
         return request('/payments/zalopay', {
             method: 'POST', headers: authHeaders(idempotencyKey),
             body: JSON.stringify({orderId}),
         });
     },
-    async getZalopayStatus(orderId: string):
-        Promise<{orderId: string; orderStatus: OrderStatus; expiresAt?: string; requiresReconciliation?: boolean;
-            awaitingGateway?: boolean; payment: {status: string; method: string;
-                paymentUrl?: string | null; qrCode?: string | null} | null}> {
+    async getZalopayStatus(orderId: string): Promise<ZalopayStatusResult> {
         return request(`/payments/zalopay/status?orderId=${encodeURIComponent(orderId)}`,
             {headers: authHeaders()});
+    },
+    // Yêu cầu Backend xác minh với ZaloPay; khách không gửi trạng thái/số tiền lên API.
+    async verifyZalopayPayment(orderId: string): Promise<ZalopayStatusResult> {
+        return request(`/payments/zalopay/verify/${encodeURIComponent(orderId)}`,
+            {method: 'POST', headers: authHeaders()});
     },
     async processPayment(payment: Payment, result?: OrderStatus):
         Promise<{status: OrderStatus; isDuplicate?: boolean; earnedPoints?: number; total?: number}> {
@@ -975,6 +1019,8 @@ export const api = {
     async getInventory(): Promise<StockIngredient[]> {
         const result = await request<any[]>('/products/inventory', { headers: authHeaders() });
         return result.map(row => ({ ...row, stockQuantity: Number(row.stockQty),
+            reservedQuantity: Number(row.reservedQty ?? 0),
+            availableQuantity: Number(row.stockQty) - Number(row.reservedQty ?? 0),
             minStockQuantity: Number(row.minStockQty) }));
     },
     async restockIngredient(ingredientId: string, quantity: number, note?: string) {
@@ -995,15 +1041,17 @@ export const api = {
         return list.map(mapOrder);
     },
     async transitionOrderStatus(orderId: string, targetStatus: OrderStatus):
-        Promise<{order: Order; message: string; previousStatus: OrderStatus}> {
+        Promise<{order: Order; message: string; previousStatus?: OrderStatus;
+            refund?: { mode: 'SIMULATED' | 'NONE'; amount: number; actualGatewayRefund: false }}> {
         const path = targetStatus === 'CANCELLED' ? `/orders/${orderId}/cancel` : `/orders/${orderId}/status`;
         const data = await request<any>(path, {
             method:targetStatus === 'CANCELLED' ? 'POST' : 'PATCH',
             headers:authHeaders(),
             ...(targetStatus !== 'CANCELLED' ? {body:JSON.stringify({status:targetStatus})} : {}),
         });
-        return {order:mapOrder(data.order || data), previousStatus:'PENDING',
-            message:`Đơn đã chuyển sang ${targetStatus}`};
+        return {order:mapOrder(data.order || data), previousStatus:data.previousStatus,
+            refund: data.refund,
+            message: targetStatus === 'CANCELLED' ? 'Đơn đã được hủy' : `Đơn đã chuyển sang ${targetStatus}`};
     },
 };
 

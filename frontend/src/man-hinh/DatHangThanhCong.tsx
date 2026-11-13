@@ -8,6 +8,7 @@ interface DatHangThanhCongProps {
     onBackToMenu: () => void;
     onViewHistory: () => void;
     onTransitionOrder?: (orderId: string, targetStatus: OrderStatus) => void;
+    cancellingOrderId?: string | null;
     statusNotice?: { type: 'success' | 'error' | 'ready'; message: string } | null;
     onClearNotice?: () => void;
 }
@@ -18,6 +19,7 @@ export const DatHangThanhCong: React.FC<DatHangThanhCongProps> = ({
                                                                       onBackToMenu,
                                                                       onViewHistory,
                                                                       onTransitionOrder,
+                                                                      cancellingOrderId,
                                                                       statusNotice,
                                                                       onClearNotice,
                                                                   }) => {
@@ -47,8 +49,8 @@ export const DatHangThanhCong: React.FC<DatHangThanhCongProps> = ({
     return (
         <div className="w-full max-w-3xl mx-auto flex-1 flex flex-col justify-center py-4 sm:py-8 space-y-5">
             <div className="space-y-4">
-                {statusNotice && statusNotice.type !== 'error' && (
-                    <div className="px-4 py-3 rounded-xl border border-[#D5CCB4] bg-[#EDE6D1] text-[#124E35] text-xs sm:text-sm font-medium flex justify-between items-start gap-2">
+                {statusNotice && (
+                    <div className={`px-4 py-3 rounded-xl border text-xs sm:text-sm font-medium flex justify-between items-start gap-2 ${statusNotice.type === 'error' ? 'border-red-300 bg-red-50 text-red-800' : 'border-[#D5CCB4] bg-[#EDE6D1] text-[#124E35]'}`}>
                         <span className="leading-relaxed">{statusNotice.message}</span>
                         {onClearNotice && (
                             <button
@@ -65,10 +67,12 @@ export const DatHangThanhCong: React.FC<DatHangThanhCongProps> = ({
 
                 <div className="p-5 sm:p-6 bg-[#FBF9F5] border border-[#E2D9C0] rounded-xl text-center space-y-1.5">
                     <h2 className="font-semibold text-lg sm:text-xl text-[#124E35]">
-                        Đặt đơn hàng thành công
+                        {trangThaiHienTai === 'CANCELLED' ? 'Đơn hàng đã hủy' : 'Đặt đơn hàng thành công'}
                     </h2>
                     <p className="text-xs sm:text-sm text-neutral-600">
-                        Đơn của bạn đã được thanh toán và chuyển xuống quầy pha chế
+                        {trangThaiHienTai === 'CANCELLED'
+                            ? 'Giao dịch hoàn tiền (nếu có) chỉ được mô phỏng trong BrewLite.'
+                            : 'Đơn của bạn đã được thanh toán và chuyển xuống quầy pha chế'}
                     </p>
                 </div>
 
@@ -90,14 +94,17 @@ export const DatHangThanhCong: React.FC<DatHangThanhCongProps> = ({
                 <div className="p-4 sm:p-5 bg-[#FBF9F5] border border-[#E2D9C0] rounded-xl space-y-3">
                     <TienTrinhDon status={trangThaiHienTai} />
                     {onTransitionOrder &&
-                        (trangThaiHienTai === 'PENDING' || trangThaiHienTai === 'PAID') && (
+                        (trangThaiHienTai === 'PAID' ||
+                            (trangThaiHienTai === 'PENDING' && !lastOrder?.pendingZalopay && !lastOrder?.paidWithZalopay)) && (
                             <div className="pt-2 border-t border-[#E2D9C0] flex justify-end">
                                 <button
                                     type="button"
+                                    disabled={Boolean(cancellingOrderId)}
                                     onClick={() => lastOrder && onTransitionOrder(lastOrder.id, 'CANCELLED')}
-                                    className="px-3.5 py-1.5 border border-[#D5CCB4] bg-[#EDE6D1] rounded-lg text-xs font-semibold text-[#124E35] cursor-pointer hover:bg-[#124E35] hover:text-[#F5F0E1] transition-colors"
+                                    className="disabled:opacity-50 disabled:cursor-wait px-3.5 py-1.5 border border-[#D5CCB4] bg-[#EDE6D1] rounded-lg text-xs font-semibold text-[#124E35] cursor-pointer hover:bg-[#124E35] hover:text-[#F5F0E1] transition-colors"
                                 >
-                                    Hủy đơn
+                                    {cancellingOrderId === lastOrder?.id ? 'Đang xử lý...' :
+                                        trangThaiHienTai === 'PAID' ? 'Hủy đơn / Hoàn mô phỏng' : 'Hủy đơn'}
                                 </button>
                             </div>
                         )}
@@ -112,14 +119,20 @@ export const DatHangThanhCong: React.FC<DatHangThanhCongProps> = ({
                     </div>
                 )}
 
-                <div className="px-4 sm:px-5 py-3.5 rounded-xl bg-[#FBF9F5] border border-[#E2D9C0] flex items-center justify-between text-xs sm:text-sm">
+                {trangThaiHienTai === 'CANCELLED' && Number(lastOrder?.simulatedRefundAmount || 0) > 0 && (
+                    <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs sm:text-sm text-amber-900">
+                        Hoàn <strong>{lastOrder?.simulatedRefundAmount?.toLocaleString('vi-VN')}đ</strong> mô phỏng trong hệ thống.
+                        ZaloPay không thực hiện chuyển tiền hoàn về ví.
+                    </div>
+                )}
+                {trangThaiHienTai !== 'CANCELLED' && <div className="px-4 sm:px-5 py-3.5 rounded-xl bg-[#FBF9F5] border border-[#E2D9C0] flex items-center justify-between text-xs sm:text-sm">
           <span className="text-neutral-700">
             Điểm thưởng đơn này: <strong className="text-[#124E35]">+{diemCongThem} điểm</strong>
           </span>
                     <span className="font-mono tabular-nums font-semibold text-[#124E35]">
             Tổng: {user?.loyaltyPoints ?? 0} điểm
           </span>
-                </div>
+                </div>}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">

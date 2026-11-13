@@ -22,7 +22,7 @@ export class VouchersController {
         });
 
         return coupons.filter(
-            c => c.usedCount < c.maxUses
+            c => c.usedCount + c.reservedCount < c.maxUses
         );
     }
 
@@ -51,7 +51,9 @@ export class VouchersController {
             validTo: v.coupon.validTo,
             createdAt: v.createdAt,
             rewardId: v.rewardId,
-            status: v.usedAt || v.coupon.usedCount >= v.coupon.maxUses
+            status: v.reservedOrderId
+                ? 'reserved'
+                : v.usedAt || v.coupon.usedCount + v.coupon.reservedCount >= v.coupon.maxUses
                 ? 'used'
                 : !v.coupon.isActive || v.coupon.validTo <= now
                     ? 'expired'

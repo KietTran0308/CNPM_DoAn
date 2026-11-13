@@ -50,7 +50,7 @@ export class RewardsService {
             const account = await this.prisma.user.findUnique({ where: { id: userId } });
             return {
                 success: true, message: 'Đổi điểm đã được ghi nhận',
-                voucherCode: replay.coupon.code, remainingPoints: account?.loyaltyPoints ?? 0,
+                voucherCode: replay.coupon.code, remainingPoints: account ? account.loyaltyPoints - account.reservedPoints : 0,
             };
         }
         try {
@@ -65,12 +65,14 @@ export class RewardsService {
                     const account = await tx.user.findUniqueOrThrow({where: {id: userId}});
                     return {
                         success: true, message: 'Đổi điểm đã được ghi nhận',
-                        voucherCode: existing.coupon.code, remainingPoints: account.loyaltyPoints,
+                        voucherCode: existing.coupon.code, remainingPoints: account.loyaltyPoints - account.reservedPoints,
                     };
                 }
+                const userBefore = await tx.user.findUniqueOrThrow({ where: { id: userId } });
                 const spent = await tx.user.updateMany({
-                    where: {id: userId, loyaltyPoints: {gte: reward.points}},
-                    data: {loyaltyPoints: {decrement: reward.points}},
+                    where: { id: userId, reservedPoints: userBefore.reservedPoints,
+                        loyaltyPoints: { gte: userBefore.reservedPoints + reward.points } },
+                    data: { loyaltyPoints: { decrement: reward.points } },
                 });
                 if (spent.count !== 1) throw new BadRequestException('Không đủ điểm đổi phần thưởng');
                 // user_vouchers.couponId UNIQUE: mỗi lần đổi tạo coupon riêng có maxUses=1.
@@ -93,7 +95,7 @@ export class RewardsService {
                 const user = await tx.user.findUniqueOrThrow({where: {id: userId}});
                 return {
                     success: true, message: 'Đổi điểm thành công',
-                    voucherCode: coupon.code, remainingPoints: user.loyaltyPoints,
+                    voucherCode: coupon.code, remainingPoints: user.loyaltyPoints - user.reservedPoints,
                 };
             }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
         } catch (error: any) {
@@ -105,7 +107,7 @@ export class RewardsService {
                     const user = await this.prisma.user.findUniqueOrThrow({where: {id: userId}});
                     return {
                         success: true, message: 'Đổi điểm đã được ghi nhận',
-                        voucherCode: replay.coupon.code, remainingPoints: user.loyaltyPoints,
+                        voucherCode: replay.coupon.code, remainingPoints: user.loyaltyPoints - user.reservedPoints,
                     };
                 }
                 throw new ConflictException('Đổi điểm đang được xử lý, vui lòng thử lại');

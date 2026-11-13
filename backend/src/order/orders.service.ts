@@ -147,16 +147,141 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
     private expiryTimer?: ReturnType<typeof setInterval>;
 
+    // Mỗi đơn mới giữ trước kho/voucher/điểm trong cùng transaction SERIALIZABLE.
+    // Không trừ kho vật lý hoặc điểm thật cho tới khi payment được xác nhận.
+    private async reserveOrderResources(tx: Prisma.TransactionClient, orderId: string) {
+        const order = await tx.order.findUniqueOrThrow({ where: { id: orderId },
+            include: { orderItems: { include: { toppings: true } } },
+        });
+        const required = new Map<string, Prisma.Decimal>();
+        const add = (id: string, quantity: Prisma.Decimal) => {
+            required.set(id, (required.get(id) ?? new Prisma.Decimal(0)).add(quantity));
+        };
+        for (const item of order.orderItems) {
+            const recipes = await tx.productIngredient.findMany({
+                where: { productId: item.productId, size: item.size },
+            });
+            if (recipes.length === 0) throw new ConflictException('Món chưa có công thức nguyên liệu');
+            for (const recipe of recipes) add(recipe.ingredientId, recipe.quantity.mul(item.qty));
+            for (const topping of item.toppings) {
+                const toppingRecipes = await tx.toppingIngredient.findMany({
+                    where: { toppingId: topping.toppingId },
+                });
+                if (toppingRecipes.length === 0) throw new ConflictException('Topping chưa có công thức nguyên liệu');
+                for (const recipe of toppingRecipes) {
+                    add(recipe.ingredientId, recipe.quantity.mul(topping.servings).mul(item.qty));
+                }
+            }
+        }
+        // Kho + reservation được cập nhật theo thứ tự cố định để giảm deadlock.
+        for (const [ingredientId, qty] of [...required.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+            if (qty.lte(0)) throw new ConflictException('Định lượng công thức không hợp lệ');
+            const ingredient = await tx.ingredient.findUniqueOrThrow({ where: { id: ingredientId } });
+            if (!ingredient.isActive || ingredient.stockQty.sub(ingredient.reservedQty).lt(qty)) {
+                throw new ConflictException(`Không đủ nguyên liệu ${ingredient.name} để giữ cho đơn hàng`);
+            }
+            const updated = await tx.ingredient.updateMany({
+                where: { id: ingredientId, version: ingredient.version, reservedQty: ingredient.reservedQty,
+                    isActive: true },
+                data: { reservedQty: { increment: qty }, version: { increment: 1 } },
+            });
+            if (updated.count !== 1) throw new ConflictException('Tồn kho vừa thay đổi, vui lòng thử lại');
+            await tx.orderIngredientReservation.create({ data: { orderId, ingredientId, quantity: qty } });
+        }
+        if (order.couponId) {
+            const coupon = await tx.coupon.findUniqueOrThrow({ where: { id: order.couponId } });
+            const now = new Date();
+            if (!coupon.isActive || coupon.validFrom > now || coupon.validTo <= now ||
+                coupon.usedCount + coupon.reservedCount >= coupon.maxUses ||
+                Number(coupon.minOrderValue) > Number(order.subtotal)) {
+                throw new ConflictException('Voucher đã hết lượt hoặc không còn hợp lệ');
+            }
+            const updated = await tx.coupon.updateMany({
+                where: { id: coupon.id, usedCount: coupon.usedCount, reservedCount: coupon.reservedCount,
+                    isActive: true },
+                data: { reservedCount: { increment: 1 } },
+            });
+            if (updated.count !== 1) throw new ConflictException('Lượt voucher vừa thay đổi');
+            const owned = await tx.userVoucher.findUnique({
+                where: { userId_couponId: { userId: order.userId, couponId: coupon.id } },
+            });
+            if (owned) {
+                const locked = await tx.userVoucher.updateMany({
+                    where: { id: owned.id, reservedOrderId: null, usedAt: null, usedOrderId: null },
+                    data: { reservedOrderId: orderId },
+                });
+                if (locked.count !== 1) throw new ConflictException('Voucher đã được giữ cho đơn khác');
+            } else if (await tx.userVoucher.findFirst({ where: { couponId: coupon.id } })) {
+                throw new ForbiddenException('Voucher không thuộc tài khoản');
+            }
+        }
+        if (order.pointsUsed > 0) {
+            const user = await tx.user.findUniqueOrThrow({ where: { id: order.userId } });
+            if (user.loyaltyPoints - user.reservedPoints < order.pointsUsed) {
+                throw new ConflictException('Điểm khả dụng không đủ để giữ cho đơn');
+            }
+            const reserved = await tx.user.updateMany({
+                where: { id: user.id, reservedPoints: user.reservedPoints,
+                    loyaltyPoints: { gte: user.reservedPoints + order.pointsUsed } },
+                data: { reservedPoints: { increment: order.pointsUsed } },
+            });
+            if (reserved.count !== 1) throw new ConflictException('Điểm đã thay đổi, vui lòng thử lại');
+        }
+        await tx.order.update({ where: { id: orderId }, data: { reservationStatus: 'HELD' } });
+    }
+
+    private async releaseOrderResources(tx: Prisma.TransactionClient, orderId: string) {
+        const order = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
+        if (order.reservationStatus !== 'HELD') return; // Đơn cũ hoặc đã giải phóng
+        const rows = await tx.orderIngredientReservation.findMany({
+            where: { orderId }, orderBy: { ingredientId: 'asc' },
+        });
+        for (const row of rows) {
+            const ingredient = await tx.ingredient.findUniqueOrThrow({ where: { id: row.ingredientId } });
+            const updated = await tx.ingredient.updateMany({
+                where: { id: row.ingredientId, version: ingredient.version,
+                    reservedQty: { gte: row.quantity } },
+                data: { reservedQty: { decrement: row.quantity }, version: { increment: 1 } },
+            });
+            if (updated.count !== 1) throw new ConflictException('Không thể hoàn giữ kho, hãy thử lại');
+        }
+        if (order.couponId) {
+            const released = await tx.coupon.updateMany({
+                where: { id: order.couponId, reservedCount: { gt: 0 } },
+                data: { reservedCount: { decrement: 1 } },
+            });
+            if (released.count !== 1) throw new ConflictException('Không thể hoàn lượt voucher');
+            await tx.userVoucher.updateMany({
+                where: { userId: order.userId, couponId: order.couponId, reservedOrderId: orderId },
+                data: { reservedOrderId: null },
+            });
+        }
+        if (order.pointsUsed > 0) {
+            const released = await tx.user.updateMany({
+                where: { id: order.userId, reservedPoints: { gte: order.pointsUsed } },
+                data: { reservedPoints: { decrement: order.pointsUsed } },
+            });
+            if (released.count !== 1) throw new ConflictException('Không thể hoàn điểm đang giữ');
+        }
+        await tx.order.updateMany({
+            where: { id: orderId, reservationStatus: 'HELD' },
+            data: { reservationStatus: 'RELEASED' },
+        });
+    }
+
     // ====================================================
     // MODULE LIFECYCLE
     // ====================================================
 
     onModuleInit() {
-        this.expiryTimer = setInterval(() => {
+        const cleanup = () => {
             void this.expirePendingOrders().catch((error) => {
                 console.error("Lỗi xử lý đơn hết hạn:", error);
             });
-        }, 60_000);
+        };
+        // Render/local khởi động lại sau thời gian offline: dọn đơn đã quá hạn ngay.
+        cleanup();
+        this.expiryTimer = setInterval(cleanup, 60_000);
     }
 
     onModuleDestroy() {
@@ -264,6 +389,15 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
         try {
             return await this.prisma.$transaction(
                 async (tx) => {
+                    // Tránh một tài khoản đặt quá nhiều đơn chỉ để giữ hàng tồn.
+                    // Kể cả QR đã hết hạn nhưng chưa đối soát vẫn tính là đang giữ.
+                    const activeHolds = await tx.order.count({
+                        where: { userId, reservationStatus: 'HELD',
+                            status: { in: [OrderStatus.PENDING, OrderStatus.PAYMENT_FAILED] } },
+                    });
+                    if (activeHolds >= 3) {
+                        throw new ConflictException('Bạn có 3 đơn đang giữ nguyên liệu. Hãy hoàn tất/hủy hoặc đối soát đơn cũ trước.');
+                    }
                     let subtotal = 0;
 
                     const orderItems: Prisma.OrderItemUncheckedCreateWithoutOrderInput[] = [];
@@ -319,7 +453,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                         if (
                             !coupon ||
                             !coupon.isActive ||
-                            coupon.usedCount >= coupon.maxUses ||
+                            coupon.usedCount + coupon.reservedCount >= coupon.maxUses ||
                             coupon.validFrom > now ||
                             coupon.validTo <= now ||
                             subtotal < Number(coupon.minOrderValue)
@@ -339,7 +473,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
                         if (
                             ownedVoucher &&
-                            (ownedVoucher.usedAt || ownedVoucher.usedOrderId)
+                            (ownedVoucher.usedAt || ownedVoucher.usedOrderId || ownedVoucher.reservedOrderId)
                         ) {
                             throw new BadRequestException("Voucher đã được sử dụng");
                         }
@@ -381,7 +515,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                             where: { id: userId },
                         });
 
-                        if (!user || user.loyaltyPoints < pointsUsed) {
+                        if (!user || user.loyaltyPoints - user.reservedPoints < pointsUsed) {
                             throw new BadRequestException("Không đủ điểm tích lũy");
                         }
                     }
@@ -443,6 +577,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                             total: true,
                         },
                     });
+
+                    await this.reserveOrderResources(tx, order.id);
 
                     return {
                         id: order.id,
@@ -649,18 +785,24 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                         );
                     }
 
-                    // Không cho phép hủy khi gateway chưa xác minh HOẶC gateway đã thu tiền.
-                    // Kể cả order vẫn PENDING do thiếu kho/điểm cũng tuyệt đối không hủy âm thầm.
-                    const gatewayPayment = await tx.payment.findFirst({ where: {
-                        orderId, method: { in: ['ZALOPAY', 'VNPAY'] }, status: { in: ['PENDING', 'SUCCESS'] },
-                    }});
-                    if (gatewayPayment?.status === 'PENDING') {
-                        throw new ConflictException('ZaloPay hoặc giao dịch cũ chưa xác nhận; phải đối soát trước khi hủy');
+                    // Giao dịch chưa rõ kết quả PHẢI đối soát trước. Không hủy để tránh
+                    // tạo điều kiện cho khách thanh toán trong khi đơn đã bị giải phóng tài nguyên.
+                    const pendingGateway = await tx.payment.findFirst({
+                        where: { orderId, method: { in: ['ZALOPAY', 'VNPAY'] }, status: 'PENDING' },
+                    });
+                    if (pendingGateway) {
+                        throw new ConflictException('Thanh toán đang chờ xác minh với cổng; vui lòng kiểm tra kết quả trước khi hủy');
                     }
-                    if (gatewayPayment?.status === 'SUCCESS') {
-                        throw new ConflictException('ZaloPay hoặc giao dịch cũ đã thu tiền; cần xác minh và hoàn tiền thật trước khi hủy');
+                    const confirmedGateway = await tx.payment.findFirst({
+                        where: { orderId, method: { in: ['ZALOPAY', 'VNPAY'] }, status: 'SUCCESS' },
+                    });
+                    // Nếu đã có tiền tại cổng nhưng đơn chưa PAID, bắt buộc hoàn tất/đối soát
+                    // trước. Chỉ đơn PAID (chưa pha chế) mới được HỦY và HOÀN MÔ PHỎNG.
+                    if (confirmedGateway && order.status !== OrderStatus.PAID) {
+                        throw new ConflictException('Cổng đã ghi nhận tiền nhưng đơn chưa hoàn tất. Cần đối soát trước khi hủy');
                     }
                     assertTransition(order.status, OrderStatus.CANCELLED);
+                    let simulatedRefundAmount = 0;
 
                     // ----------------------------------------------
                     // CANCEL ORDER
@@ -679,6 +821,12 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
                     if (updated.count !== 1) {
                         throw new ConflictException("Trạng thái đơn đã bị thay đổi");
+                    }
+
+                    // Giải phóng toàn bộ tài nguyên giữ trước nếu đơn chưa nhận tiền.
+                    // Giao dịch chưa rõ trạng thái đã bị chặn trước transaction này.
+                    if (order.status !== OrderStatus.PAID) {
+                        await this.releaseOrderResources(tx, orderId);
                     }
 
                     // ----------------------------------------------
@@ -705,7 +853,12 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                         }
 
                         if (payment) {
-                            // Hoàn tiền MÔ PHỎNG (ZaloPay hoặc giao dịch cũ thành công đã bị chặn phía trên).
+                            if (payment.refundedAmount.greaterThan(0)) {
+                                throw new ConflictException('Giao dịch này đã được ghi nhận hoàn mô phỏng trước đó');
+                            }
+                            // Chỉ cập nhật SỔ CÁI DEMO trong BrewLite. KHÔNG gọi ZaloPay Refund API,
+                            // không khẳng định đã chuyển tiền thật về ví của khách.
+                            simulatedRefundAmount = Number(payment.amount);
                             await tx.payment.update({
                                 where: { id: payment.id },
                                 data: {
@@ -742,7 +895,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                             // Khách có thể đã sử dụng điểm vừa được thưởng.
                             // Trừ số điểm còn lại, phần thiếu ghi nợ để khấu trừ vào lần EARN tiếp theo.
                             const account = await tx.user.findUniqueOrThrow({where: {id: userId}});
-                            const deducted = Math.min(account.loyaltyPoints, earned.points);
+                            const deducted = Math.min(account.loyaltyPoints - account.reservedPoints, earned.points);
                             await tx.user.update({where: {id: userId}, data: {
                                     loyaltyPoints: {decrement: deducted},
                                     loyaltyDebt: {increment: earned.points - deducted},
@@ -840,9 +993,16 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                         },
                     });
 
-                    return tx.order.findUniqueOrThrow({
-                        where: { id: orderId },
-                    });
+                    const cancelledOrder = await tx.order.findUniqueOrThrow({ where: { id: orderId } });
+                    return {
+                        order: cancelledOrder,
+                        previousStatus: order.status,
+                        refund: {
+                            mode: simulatedRefundAmount > 0 ? 'SIMULATED' : 'NONE',
+                            amount: simulatedRefundAmount,
+                            actualGatewayRefund: false,
+                        },
+                    };
                 },
                 {
                     isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
@@ -882,6 +1042,45 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
 
         if (!order) {
             throw new NotFoundException("Không tìm thấy đơn hàng");
+        }
+
+        // Với đơn mới đã HELD, dùng snapshot công thức lúc tạo đơn.
+        // Không tính lại công thức đã có thể thay đổi sau khi người dùng quét QR.
+        if (order.reservationStatus === 'HELD') {
+            const rows = await tx.orderIngredientReservation.findMany({
+                where: { orderId }, orderBy: { ingredientId: 'asc' },
+            });
+            if (!rows.length) throw new ConflictException('Thiếu dữ liệu nguyên liệu đã giữ');
+            const consumed = await tx.ingredientMovement.findFirst({
+                where: { orderId, movementType: 'CONSUMPTION' },
+            });
+            if (consumed) throw new ConflictException('Đơn đã xuất kho');
+            for (const row of rows) {
+                const ingredient = await tx.ingredient.findUniqueOrThrow({ where: { id: row.ingredientId } });
+                if (!ingredient.isActive || ingredient.stockQty.lt(row.quantity) ||
+                    ingredient.reservedQty.lt(row.quantity)) {
+                    throw new ConflictException('Tồn kho đã giữ không còn khớp, cần đối soát');
+                }
+                const stockAfter = ingredient.stockQty.sub(row.quantity);
+                const updated = await tx.ingredient.updateMany({
+                    where: { id: row.ingredientId, version: ingredient.version,
+                        stockQty: { gte: row.quantity }, reservedQty: { gte: row.quantity } },
+                    data: { stockQty: { decrement: row.quantity },
+                        reservedQty: { decrement: row.quantity }, version: { increment: 1 },
+                        updatedAt: new Date() },
+                });
+                if (updated.count !== 1) throw new ConflictException('Tồn kho vừa thay đổi, cần thử lại');
+                await tx.ingredientMovement.create({ data: {
+                    ingredientId: row.ingredientId, orderId, performedBy: performedBy ?? null,
+                    movementType: 'CONSUMPTION', expectedVersion: ingredient.version,
+                    quantityChange: row.quantity.negated(), stockBefore: ingredient.stockQty,
+                    stockAfter, note: 'Xuất kho từ nguyên liệu đã giữ cho đơn',
+                } });
+            }
+            return { orderId, consumedIngredients: rows.length };
+        }
+        if (order.reservationStatus === 'RELEASED' || order.reservationStatus === 'CONSUMED') {
+            throw new ConflictException('Đơn không còn quyền sử dụng nguyên liệu đã giữ');
         }
 
         // 2. Kiểm tra đơn đã xuất kho hay chưa.
@@ -971,7 +1170,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                 );
             }
 
-            if (ingredient.stockQty.lessThan(requiredQuantity)) {
+            if (ingredient.stockQty.sub(ingredient.reservedQty).lessThan(requiredQuantity)) {
                 throw new ConflictException(
                     `Không đủ nguyên liệu ${ingredient.name}. ` +
                     `Tồn kho: ${ingredient.stockQty.toString()} ${ingredient.unit}, ` +
@@ -990,8 +1189,9 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                     id: ingredientId,
                     version: ingredient.version,
                     stockQty: {
-                        gte: requiredQuantity,
+                        gte: ingredient.reservedQty.add(requiredQuantity),
                     },
+                    reservedQty: ingredient.reservedQty,
                     isActive: true,
                 },
                 data: {

@@ -26,8 +26,11 @@ export default function ZalopayResultPage() {
       if (stopped) return;
       attempts++;
       try {
-        // Chỉ tin trạng thái trong DB sau IPN, không lấy kết quả từ query URL trình duyệt.
-        const result = await api.getZalopayStatus(orderId);
+        // Khi cổng redirect về mà callback chưa đến, Backend chủ động QueryDR.
+        // Kết quả trên URL của trình duyệt không được dùng để xác nhận PAID.
+        const result = attempts === 2 || attempts === 12
+          ? await api.verifyZalopayPayment(orderId)
+          : await api.getZalopayStatus(orderId);
         if (stopped) return;
         if (result.orderStatus === 'PAID' || result.orderStatus === 'PREPARING' ||
             result.orderStatus === 'READY' || result.orderStatus === 'COMPLETED') {

@@ -69,6 +69,7 @@ model User {
   phone         String?  @db.VarChar(20)
   role          String   @default("CUSTOMER") @db.VarChar(16)
   loyaltyPoints Int      @default(0) @map("loyalty_points")
+  reservedPoints Int      @default(0) @map("reserved_points")
   loyaltyDebt   Int      @default(0) @map("loyalty_debt")
   createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
@@ -136,6 +137,7 @@ model Coupon {
   minOrderValue Decimal       @default(0) @map("min_order_value") @db.Decimal(12, 2)
   maxUses       Int           @map("max_uses")
   usedCount     Int           @default(0) @map("used_count")
+  reservedCount Int           @default(0) @map("reserved_count")
   isActive      Boolean       @default(true) @map("is_active")
   validFrom     DateTime      @map("valid_from") @db.Timestamptz(6)
   validTo       DateTime      @map("valid_to") @db.Timestamptz(6)
@@ -152,6 +154,7 @@ model Order {
   userId         String      @map("user_id") @db.Uuid
   couponId       String?     @map("coupon_id") @db.Uuid
   status         OrderStatus @default(PENDING)
+  reservationStatus String @default("NONE") @map("reservation_status") @db.VarChar(16)
   subtotal       Decimal     @db.Decimal(12, 2)
   discountAmount Decimal     @default(0) @map("discount_amount") @db.Decimal(12, 2)
   pointsUsed     Int         @default(0) @map("points_used")
@@ -169,6 +172,7 @@ model Order {
   statusHistory       OrderStatusHistory[]
   usedVouchers        UserVoucher[]        @relation("VoucherUsedOrder")
   ingredientMovements IngredientMovement[]
+  ingredientReservations OrderIngredientReservation[]
 
   idempotencyKey String? @unique(map: "ux_orders_idempotency_key") @map("idempotency_key") @db.VarChar(128)
   requestHash    String? @map("request_hash") @db.VarChar(64)
@@ -287,6 +291,7 @@ model UserVoucher {
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   usedAt      DateTime? @map("used_at") @db.Timestamptz(6)
   usedOrderId String?   @map("used_order_id") @db.Uuid
+  reservedOrderId String? @map("reserved_order_id") @db.Uuid
 
   user      User   @relation(fields: [userId], references: [id])
   coupon    Coupon @relation(fields: [couponId], references: [id])
@@ -303,6 +308,7 @@ model Ingredient {
   name        String   @db.VarChar(255)
   unit        String   @db.VarChar(10)
   stockQty    Decimal  @default(0) @map("stock_quantity") @db.Decimal(14, 3)
+  reservedQty Decimal  @default(0) @map("reserved_quantity") @db.Decimal(14, 3)
   minStockQty Decimal  @default(0) @map("min_stock_quantity") @db.Decimal(14, 3)
   version     Int      @default(0)
   isActive    Boolean  @default(true) @map("is_active")
@@ -311,6 +317,7 @@ model Ingredient {
   productRecipes ProductIngredient[]
   toppingRecipes ToppingIngredient[]
   movements      IngredientMovement[]
+  reservations   OrderIngredientReservation[]
 
   @@map("ingredients")
 }
@@ -364,4 +371,19 @@ model IngredientMovement {
   @@index([orderId], map: "idx_movements_order")
   @@index([performedBy], map: "idx_movements_performed_by")
   @@map("ingredient_movements")
+}
+
+// Lưu snapshot lượng nguyên liệu giữ cho từng đơn, để công thức thay đổi vẫn
+// trừ đúng lượng đã giữ khi xác nhận trả tiền.
+model OrderIngredientReservation {
+  orderId      String  @map("order_id") @db.Uuid
+  ingredientId String  @map("ingredient_id") @db.Uuid
+  quantity     Decimal @db.Decimal(14, 3)
+
+  order      Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  ingredient Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+
+  @@id([orderId, ingredientId])
+  @@index([ingredientId], map: "idx_order_ingredient_reservations_ingredient")
+  @@map("order_ingredient_reservations")
 }

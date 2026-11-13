@@ -78,6 +78,21 @@ describe('ZaloPay Sandbox v2 signing', () => {
         expect(service.verifyCallback({ data: data.replace('90000', '1'), mac, type: 1 })).toBeNull();
     });
 
+    it('preserves 64-bit zp_trans_id from signed callback instead of rounding it', () => {
+        const data = '{"app_id":12345,"app_trans_id":"261112_abc123456789",' +
+            '"amount":90000,"zp_trans_id":2611121234567890123}';
+        const mac = createHmac('sha256', 'test-integration-key-2').update(data).digest('hex');
+        const verified = service.verifyCallback({ data, mac, type: 1 });
+        expect(String(verified?.zp_trans_id)).toBe('2611121234567890123');
+    });
+
+    it('preserves 64-bit zp_trans_id in QueryDR response', async () => {
+        global.fetch = jest.fn(async () => ({ ok: true, text: async () =>
+            '{"return_code":1,"amount":90000,"zp_trans_id":2611121234567890123}' })) as any;
+        const response = await service.queryOrder('261112_abc123456789');
+        expect(response.zpTransId).toBe('2611121234567890123');
+    });
+
     it('signs query API with app_id|app_trans_id|key1', async () => {
         global.fetch = jest.fn(async (_url: any, options: any) => {
             const body = JSON.parse(options.body);

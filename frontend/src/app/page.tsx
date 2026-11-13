@@ -4,10 +4,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import {
     api,
+    ApiHttpError,
     Product,
     Order,
     OrderItem,
     OrderStatus,
+    ZalopayStatusResult,
     Payment,
     User,
     DEFAULT_PRODUCTS,
@@ -60,6 +62,8 @@ const ThanhDieuHuong: React.FC<ThanhDieuHuongProps> = ({
     const [loiLogo, setLoiLogo] = useState(false);
     const duongDanLogo = layDuongDanAnh(LOGO.chinh);
     const userPoints = user?.loyaltyPoints ?? 0;
+    const usablePoints = Math.max(0, user?.availablePoints ?? userPoints);
+    const heldPoints = Math.max(0, userPoints - usablePoints);
 
     return (
         <header className="flex justify-between items-center px-4 sm:px-6 py-3 bg-[#FBF9F5] rounded-xl border border-[#E2D9C0] shadow-xs relative">
@@ -85,7 +89,7 @@ const ThanhDieuHuong: React.FC<ThanhDieuHuongProps> = ({
             <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
                 {user && <div className="group relative">
                     <div className="text-xs sm:text-sm text-[#124E35] font-mono tabular-nums px-3 py-1.5 rounded-lg bg-[#EDE6D1] border border-[#D5CCB4] font-medium cursor-help select-none">
-                        Điểm: <span className="font-semibold text-[#124E35]">{userPoints}</span>
+                        Điểm khả dụng: <span className="font-semibold text-[#124E35]">{usablePoints}</span>
                     </div>
                     <div className="absolute right-0 top-full mt-2 w-72 p-3.5 bg-[#FBF9F5] border border-[#D5CCB4] rounded-xl shadow-lg text-xs text-[#124E35] z-50 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 pointer-events-none">
                         <div className="font-semibold text-sm border-b border-[#E2D9C0] pb-1.5 mb-2">
@@ -95,7 +99,8 @@ const ThanhDieuHuong: React.FC<ThanhDieuHuongProps> = ({
                             <div>• <span className="font-semibold">Tích điểm:</span> Mỗi 10.000đ chi tiêu = +1 điểm thưởng</div>
                             <div>• <span className="font-semibold">Quy đổi:</span> 1 điểm = 500đ khi thanh toán đơn hàng</div>
                             <div className="pt-1.5 mt-1 border-t border-[#E2D9C0] font-medium">
-                                Điểm hiện tại: <span className="font-bold">{userPoints} điểm</span> ({formatPrice(userPoints * 500)})
+                                Điểm khả dụng: <span className="font-bold">{usablePoints} điểm</span> ({formatPrice(usablePoints * 500)})
+                                {heldPoints > 0 && <div className="mt-1 text-amber-700">Đang giữ cho đơn chờ: {heldPoints} điểm (tổng: {userPoints})</div>}
                             </div>
                         </div>
                     </div>
@@ -120,7 +125,7 @@ const ThanhDieuHuong: React.FC<ThanhDieuHuongProps> = ({
                         <div className="text-[11px] text-[#124E35]/80">Tài khoản đang đăng nhập</div>
                         <div className="text-[#124E35] font-semibold truncate mt-0.5">{user?.email}</div>
                         <div className="font-mono tabular-nums text-[#124E35] font-semibold mt-1">
-                            Điểm tích lũy: {user?.loyaltyPoints ?? 0} điểm
+                            Điểm khả dụng: {usablePoints} / {userPoints} điểm
                         </div>
                     </div>
                     <button
@@ -133,11 +138,6 @@ const ThanhDieuHuong: React.FC<ThanhDieuHuongProps> = ({
                     >
                         Lịch sử đơn hàng
                     </button>
-                    {(user.role === 'STAFF' || user.role === 'ADMIN') && (
-                        <a href="/staff" className="block px-3.5 py-2.5 border-b border-[#E2D9C0] hover:bg-[#EDE6D1] font-semibold">
-                            Màn hình quầy và kho
-                        </a>
-                    )}
                     <button
                         type="button"
                         onClick={onLogout}
@@ -205,7 +205,7 @@ function UngDungDatNuoc() {
     const [usePoints, setUsePoints] = useState(false);
     const [pointsToRedeem, setPointsToRedeem] = useState(0);
 
-    const userLoyaltyPoints = user?.loyaltyPoints ?? 0;
+    const userLoyaltyPoints = user?.availablePoints ?? user?.loyaltyPoints ?? 0;
     const maxUsablePoints = Math.min(userLoyaltyPoints, Math.floor(totalCartPrice / 500));
     const actualPointsToUse = usePoints ? Math.min(Math.max(0, pointsToRedeem), maxUsablePoints) : 0;
     const pointsDiscount = actualPointsToUse * 500;
@@ -217,19 +217,25 @@ function UngDungDatNuoc() {
     const [currentPendingOrderId, setCurrentPendingOrderId] = useState<string | null>(null);
     // QR thuộc đúng giao dịch ZaloPay do Backend tạo. Không chuyển sang /payment-qr.
     const [zalopayCheckout, setZalopayCheckout] = useState<ZalopayCheckout | null>(null);
+    // Khôi phục đơn không tự bật QR: chỉ hiển thị sau thao tác của khách.
+    const [showZalopayQr, setShowZalopayQr] = useState(false);
     const [zalopayMessage, setZalopayMessage] = useState<string | null>(null);
     const [zalopayNeedsReconciliation, setZalopayNeedsReconciliation] = useState(false);
+    const [zalopayVerifying, setZalopayVerifying] = useState(false);
 
-    const hienQrTrongThanhToan = (data: ZalopayCheckout) => {
+    const hienQrTrongThanhToan = (data: ZalopayCheckout, revealQr = true) => {
         sessionStorage.setItem('brewlite_zalopay_order', data.orderId);
         setCurrentPendingOrderId(data.orderId);
         setPaymentMethod('wallet');
         setWalletType('ZaloPay');
         setCheckoutStatus(null);
         setZalopayCheckout(data);
+        setShowZalopayQr(revealQr);
         setZalopayMessage(data.qrCode
-            ? 'Quét mã bằng môi trường ZaloPay Sandbox và chờ hệ thống xác nhận.'
-            : 'Giao dịch không có QR. Bạn có thể mở đường dẫn thanh toán bên dưới nếu có.');
+            ? 'Quét mã bằng ZaloPay Sandbox và chờ hệ thống xác nhận.'
+            : data.paymentUrl
+                ? 'Đã nhận liên kết ZaloPay. QR bên dưới được tạo từ liên kết thanh toán chính thức.'
+                : 'Chưa có QR hay liên kết thanh toán. Đang chờ Backend cập nhật.');
         setZalopayNeedsReconciliation(false);
         setStockError(null);
         setManHinhHienTai('checkout');
@@ -237,6 +243,7 @@ function UngDungDatNuoc() {
 
     // Mỗi lần gửi lại cùng request thanh toán giữ nguyên key (kể cả timeout HTTP).
     const paymentKeysRef = useRef<Record<string, string>>({});
+    const checkoutInFlightRef = useRef(false);
     const resetPaymentKey = (orderId: string, method: string, simulateFailure: boolean) => {
         const signature = `${orderId}:${method}:${simulateFailure}`;
         delete paymentKeysRef.current[signature];
@@ -251,51 +258,113 @@ function UngDungDatNuoc() {
         }
         return paymentKeysRef.current[signature];
     };
-    useEffect(() => {
-        // Quay về khi mất mạng/đóng tab ZaloPay: không tạo đơn mới khi gateway còn chờ.
-        const resumeParam = new URLSearchParams(window.location.search).get('resumeZalopay');
-        if (resumeParam && /^[0-9a-f-]{36}$/i.test(resumeParam) && getStoredToken()) {
-            sessionStorage.setItem('brewlite_zalopay_order', resumeParam);
-            window.history.replaceState(null, '', window.location.pathname);
-        }
-        const pendingId = sessionStorage.getItem('brewlite_zalopay_order');
-        if (!pendingId || !getStoredToken()) return;
-        api.getZalopayStatus(pendingId).then(result => {
-            if (['PAID', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED'].includes(result.orderStatus)) {
-                sessionStorage.removeItem('brewlite_zalopay_order');
-                if (result.orderStatus !== 'CANCELLED') sessionStorage.removeItem('brewlite_create_key');
-            } else if (result.payment?.status !== 'FAILED') {
-                setCurrentPendingOrderId(pendingId);
-                if (result.payment?.status === 'PENDING' && result.payment.method === 'ZALOPAY' &&
-                    !result.awaitingGateway && (result.payment.qrCode || result.payment.paymentUrl)) {
-                    void api.getMyOrders().then(orders => {
-                        const order = orders.find(item => item.id === pendingId);
-                        if (!order) return;
-                        hienQrTrongThanhToan({ orderId: pendingId, orderCode: order.orderCode,
-                            amount: order.total, qrCode: result.payment!.qrCode || null,
-                            paymentUrl: result.payment!.paymentUrl || null,
-                            expiresAt: result.expiresAt || null });
-                    }).catch(() => { /* Có thể khôi phục từ lịch sử khi API hoạt động. */ });
-                }
-            }
-        }).catch(() => { /* Vẫn giữ key để kiểm tra sau, không tự hủy. */ });
-    }, []);
 
     const [checkoutStatus, setCheckoutStatus] = useState<OrderStatus | null>(null);
     const [checkoutLoading, setCheckoutLoading] = useState(false);
     const [stockError, setStockError] = useState<string | null>(null);
+
+    // Chỉ Backend quyết định trạng thái. Hàm dùng chung cho refresh, link trả về và lịch sử.
+    const khoiPhucDonZalopay = async (orderId: string) => {
+        const [status, orders] = await Promise.all([
+            api.getZalopayStatus(orderId), api.getMyOrders(),
+        ]);
+        const order = orders.find(o => o.id === orderId);
+        if (!order) throw new Error('Không tìm thấy đơn hàng thuộc tài khoản đang đăng nhập.');
+        setOrderHistory(orders);
+
+        if (['PAID', 'PREPARING', 'READY', 'COMPLETED'].includes(order.status)) {
+            setLastOrder(order);
+            setCurrentPendingOrderId(null);
+            setZalopayCheckout(null);
+            setZalopayNeedsReconciliation(false);
+            setZalopayMessage(null);
+            sessionStorage.removeItem('brewlite_zalopay_order');
+            sessionStorage.removeItem('brewlite_create_key');
+            clearCart();
+            setUsePoints(false);
+            setPointsToRedeem(0);
+            void api.getMe().then(me => { setUser(me); setStoredUser(me); }).catch(() => {});
+            setManHinhHienTai('success');
+            return;
+        }
+        if (status.orderStatus === 'CANCELLED') {
+            sessionStorage.removeItem('brewlite_zalopay_order');
+            setCurrentPendingOrderId(null);
+            setZalopayCheckout(null);
+            setShowZalopayQr(false);
+            setManHinhHienTai('history');
+            setStatusNotice({type: 'error', orderId, message: 'Đơn đã hủy; không thể tiếp tục thanh toán.'});
+            return;
+        }
+        if (status.payment?.status === 'FAILED') {
+            sessionStorage.removeItem('brewlite_zalopay_order');
+            setCurrentPendingOrderId(null);
+            setZalopayCheckout(null);
+            setManHinhHienTai('history');
+            setStatusNotice({type: 'error', orderId,
+                message: 'ZaloPay đã xác nhận giao dịch thất bại. Có thể thử lại từ lịch sử nếu đơn chưa hết hạn.'});
+            return;
+        }
+        if (status.payment?.status === 'PENDING' || status.payment?.status === 'SUCCESS') {
+            const needsReview = !!status.requiresReconciliation || !!status.awaitingGateway ||
+                status.payment.status === 'SUCCESS' ||
+                (!!status.expiresAt && Date.parse(status.expiresAt) <= Date.now());
+            hienQrTrongThanhToan({ orderId, orderCode: order.orderCode, amount: order.total,
+                qrCode: needsReview ? null : status.payment.qrCode || null,
+                paymentUrl: needsReview ? null : status.payment.paymentUrl || null,
+                expiresAt: status.expiresAt || null }, false);
+            if (needsReview) {
+                setZalopayNeedsReconciliation(true);
+                setZalopayMessage('Giao dịch đã quá hạn hoặc cần đối soát. Không thanh toán thêm, liên hệ cửa hàng.');
+            } else if (!status.payment.qrCode && !status.payment.paymentUrl) {
+                setZalopayMessage('ZaloPay đang tạo mã QR. Hệ thống sẽ tự kiểm tra lại trạng thái.');
+            }
+            return;
+        }
+        // Đơn đã tạo nhưng chưa có payment: không lấy giỏ hiện tại để thanh toán nhầm đơn cũ.
+        setCurrentPendingOrderId(null);
+        setZalopayCheckout(null);
+        setManHinhHienTai('history');
+        setStatusNotice({ type: 'error', orderId,
+            message: 'Đơn chưa có giao dịch ZaloPay. Kiểm tra nội dung đơn trong lịch sử trước khi thanh toán.' });
+    };
+
+    // Chờ xác thực JWT xong rồi mới đọc lại đơn; không nuốt lỗi hoặc xóa giao dịch khi mất mạng.
+    useEffect(() => {
+        const resumeParam = new URLSearchParams(window.location.search).get('resumeZalopay');
+        if (resumeParam && /^[0-9a-f-]{36}$/i.test(resumeParam)) {
+            sessionStorage.setItem('brewlite_zalopay_order', resumeParam);
+            window.history.replaceState(null, '', window.location.pathname);
+        }
+        if (!token) return;
+        const pendingId = sessionStorage.getItem('brewlite_zalopay_order');
+        if (!pendingId) return;
+        void khoiPhucDonZalopay(pendingId).catch((error: Error) => {
+            setStatusNotice({type: 'error', orderId: pendingId,
+                message: error.message || 'Không kiểm tra được đơn đang thanh toán. Hãy mở lịch sử và thử lại.'});
+            setManHinhHienTai('history');
+            void taiLichSuDon();
+        });
+    }, [token]);
 
     useEffect(() => {
         if (!zalopayCheckout || manHinhHienTai !== 'checkout') return;
         const orderId = zalopayCheckout.orderId;
         let stopped = false;
         let checking = false;
-        const kiemTra = async () => {
+        let lastGatewayQuery = 0;
+        const mountedAt = Date.now();
+        const kiemTra = async (verifyWithGateway = false) => {
             if (stopped || checking) return;
             checking = true;
+            // QueryDR không chạy mỗi 5 giây: tối đa một lần/phút, backend còn giới hạn riêng.
+            const shouldVerify = verifyWithGateway && Date.now() - lastGatewayQuery >= 60_000;
+            if (shouldVerify) lastGatewayQuery = Date.now();
             try {
-                // Chỉ Backend/callback đã xác minh mới quyết định PAID.
-                const result = await api.getZalopayStatus(orderId);
+                // Chỉ Backend/callback/QueryDR đã xác minh mới quyết định PAID.
+                const result = shouldVerify
+                    ? await api.verifyZalopayPayment(orderId)
+                    : await api.getZalopayStatus(orderId);
                 if (stopped) return;
                 if (['PAID', 'PREPARING', 'READY', 'COMPLETED'].includes(result.orderStatus)) {
                     const orders = await api.getMyOrders();
@@ -315,6 +384,7 @@ function UngDungDatNuoc() {
                     setStockError(null);
                     setCurrentPendingOrderId(null);
                     setZalopayCheckout(null);
+                    setShowZalopayQr(false);
                     setZalopayMessage(null);
                     setZalopayNeedsReconciliation(false);
                     paymentKeysRef.current = {};
@@ -338,13 +408,12 @@ function UngDungDatNuoc() {
                     setZalopayMessage(null);
                     setZalopayNeedsReconciliation(false);
                     setStockError('ZaloPay đã xác nhận giao dịch thất bại. Bạn có thể thử lại khi giao dịch trước đã kết thúc.');
-                    // Đơn thanh toán lại từ Lịch sử có thể không có giỏ hàng hiện tại.
-                    if (useGioHang.getState().cartLines.length === 0) {
-                        setManHinhHienTai('history');
-                        setStatusNotice({ type: 'error', orderId,
-                            message: 'Giao dịch đã thất bại. Hãy thử lại từ Lịch sử đơn hàng.' });
-                        void api.getMyOrders().then(setOrderHistory).catch(() => {});
-                    }
+                    // Không hiển thị giỏ mới như nội dung của đơn vừa bị thất bại.
+                    setCurrentPendingOrderId(null);
+                    setManHinhHienTai('history');
+                    setStatusNotice({ type: 'error', orderId,
+                        message: 'Giao dịch đã thất bại. Hãy kiểm tra đơn và thử lại từ Lịch sử đơn hàng.' });
+                    void api.getMyOrders().then(setOrderHistory).catch(() => {});
                     return;
                 }
                 if (result.orderStatus === 'CANCELLED' || result.orderStatus === 'PAYMENT_FAILED') {
@@ -365,9 +434,13 @@ function UngDungDatNuoc() {
                         paymentUrl: result.payment?.paymentUrl || null,
                         expiresAt: result.expiresAt || null,
                     } : prev);
-                    setZalopayMessage(result.payment.qrCode
-                        ? 'Đang chờ ZaloPay xác nhận. Trang này tự kiểm tra kết quả mỗi 5 giây.'
-                        : 'Chưa có mã QR. Có thể dùng liên kết thanh toán nếu được cung cấp.');
+                    setZalopayMessage(previous => result.verification
+                        ? moTaKiemTraZalopay(result)
+                        : previous && /ZaloPay (?:từ chối truy vấn|chưa xác nhận thu tiền)|Đã hỏi ZaloPay|Chưa gửi truy vấn mới|Không thể truy vấn ZaloPay/.test(previous)
+                            ? previous
+                            : result.payment.qrCode || result.payment.paymentUrl
+                                ? 'Đang chờ ZaloPay xác nhận. Trang tự đọc trạng thái Backend mỗi 5 giây.'
+                                : 'Chưa có QR hay liên kết thanh toán. Hệ thống đang kiểm tra giao dịch.');
                     return;
                 }
                 setZalopayNeedsReconciliation(true);
@@ -379,10 +452,24 @@ function UngDungDatNuoc() {
             }
         };
         void kiemTra();
+        const onReturnToTab = () => {
+            // Khách quét QR/chụp màn hình rồi quay lại: truy vấn cổng ngay khi quay về.
+            if (document.visibilityState === 'visible') void kiemTra(true);
+        };
         const interval = window.setInterval(() => {
-            if (document.visibilityState === 'visible') void kiemTra();
+            if (document.visibilityState === 'visible') {
+                void kiemTra(Date.now() - mountedAt >= 30_000 &&
+                    Date.now() - lastGatewayQuery >= 60_000);
+            }
         }, 5000);
-        return () => { stopped = true; window.clearInterval(interval); };
+        document.addEventListener('visibilitychange', onReturnToTab);
+        window.addEventListener('focus', onReturnToTab);
+        return () => {
+            stopped = true;
+            window.clearInterval(interval);
+            document.removeEventListener('visibilitychange', onReturnToTab);
+            window.removeEventListener('focus', onReturnToTab);
+        };
     }, [zalopayCheckout?.orderId, manHinhHienTai, clearCart, queryClient]);
 
 
@@ -402,6 +489,7 @@ function UngDungDatNuoc() {
     const [lastOrder, setLastOrder] = useState<Order | null>(null);
     const [orderHistory, setOrderHistory] = useState<Order[]>([]);
     const [historyLoading, setHistoryLoading] = useState(false);
+    const [cancellingOrderId, setCancellingOrderId] = useState<string | null>(null);
     const [statusNotice, setStatusNotice] = useState<{
         type: 'success' | 'error' | 'ready';
         message: string;
@@ -409,27 +497,60 @@ function UngDungDatNuoc() {
     } | null>(null);
 
     useEffect(() => {
+        let stopped = false;
         const existing = getStoredToken();
         // Không hiển thị thông tin cache khi token chưa được backend xác nhận.
         setUser(null);
         // Xem menu không cần đăng nhập; chỉ xác thực ở bước thanh toán.
         void taiDanhSachMon();
         if (existing) {
-            api.getMe().then(me => {
-                setUser(me); setStoredUser(me); setToken(existing);
-            }).catch(() => {
-                setStoredToken(null); setStoredUser(null); setUser(null); setToken(null);
-                sessionStorage.removeItem('brewlite_create_key');
-            });
+            void (async () => {
+                for (let attempt = 0; attempt < 5; attempt++) {
+                    if (stopped || getStoredToken() !== existing) return;
+                    try {
+                        const me = await api.getMe();
+                        if (stopped || getStoredToken() !== existing) return;
+                        setUser(me); setStoredUser(me); setToken(existing);
+                        return;
+                    } catch (error) {
+                        if (stopped || getStoredToken() !== existing) return;
+                        if (error instanceof ApiHttpError && [401, 403].includes(error.status)) {
+                            // Chỉ đăng xuất khi Backend thật sự từ chối JWT.
+                            setStoredToken(null); setStoredUser(null); setUser(null); setToken(null);
+                            sessionStorage.removeItem('brewlite_create_key');
+                            return;
+                        }
+                        if (attempt === 4) {
+                            // Mạng/Render cold start: GIỮ token để có thể tải lại và khôi phục QR.
+                            setStockError('Máy chủ đang khởi động hoặc mạng chưa ổn định. ' +
+                                'Hãy tải lại trang sau khi kết nối phục hồi; phiên đăng nhập vẫn được giữ.');
+                            return;
+                        }
+                        await new Promise<void>(resolve => window.setTimeout(resolve, 3500));
+                    }
+                }
+            })();
         }
+        return () => { stopped = true; };
     }, []);
 
     const taiDanhSachMon = async () => {
         setProductsLoading(true);
         setProductsError(null);
         try {
-            const data = await api.getProducts();
-            setProducts(data);
+            // Render Free có thể vừa khởi động sau thời gian không truy cập.
+            // Chỉ thử lại API đọc thực đơn (GET); KHÔNG retry tự động tạo đơn/thanh toán.
+            let data: Product[] | null = null;
+            for (let attempt = 0; attempt < 5; attempt++) {
+                try {
+                    data = await api.getProducts();
+                    break;
+                } catch (error) {
+                    if (attempt === 4) throw error;
+                    await new Promise<void>(resolve => window.setTimeout(resolve, 3500));
+                }
+            }
+            if (data) setProducts(data);
             // Toppings không tải được không được che lỗi menu hoặc làm mất menu đã tải.
             try { setAvailableToppings(await api.getToppings()); }
             catch (error) { console.error('Không tải được topping:', error); }
@@ -489,6 +610,25 @@ function UngDungDatNuoc() {
             setHistoryLoading(false);
         }
     };
+
+    useEffect(() => {
+        if (!token || manHinhHienTai !== 'history') return;
+        let stopped = false;
+        const refresh = async () => {
+            try {
+                const updated = await api.getMyOrders();
+                if (!stopped) {
+                    setOrderHistory(updated);
+                    queryClient.setQueryData(QUERY_KEYS.lichSuDon, updated);
+                }
+            } catch { /* Giữ nội dung cũ khi mất mạng, không kết luận trạng thái. */ }
+        };
+        void refresh();
+        const timer = window.setInterval(() => {
+            if (document.visibilityState === 'visible') void refresh();
+        }, 10000);
+        return () => { stopped = true; window.clearInterval(timer); };
+    }, [token, manHinhHienTai, queryClient]);
 
     const capNhatLichSuDon = (updater: (prev: Order[]) => Order[]) => {
         setOrderHistory((prev) => {
@@ -778,7 +918,8 @@ function UngDungDatNuoc() {
             setManHinhHienTai('auth');
             return;
         }
-        if (cartLines.length === 0) return;
+        if (cartLines.length === 0 || checkoutInFlightRef.current || zalopayCheckout) return;
+        checkoutInFlightRef.current = true;
         setCheckoutLoading(true);
         setStockError(null);
 
@@ -814,6 +955,13 @@ function UngDungDatNuoc() {
                     orderCode: orderRes.orderCode,
                     createdAt: createdAtFormatted,
                     items: orderItems,
+                    // Thông tin đã gửi Backend để phần điểm/ưu đãi vẫn hiện khi QR được mở.
+                    // Khi refresh, getMyOrders sẽ thay snapshot bằng dữ liệu chính thức.
+                    subtotal: rawSubtotal,
+                    discountAmount,
+                    couponCode: appliedPromo?.code,
+                    pointsUsed: actualPointsToUse,
+                    pointsDiscount,
                 };
                 capNhatLichSuDon((prev) => [pendingOrder, ...prev.filter((o) => o.id !== orderId)]);
             } else {
@@ -822,6 +970,20 @@ function UngDungDatNuoc() {
                 const existingOrder = (await api.getMyOrders()).find(o => o.id === orderId);
                 if (!existingOrder || !['PENDING', 'PAYMENT_FAILED'].includes(existingOrder.status)) {
                     throw new Error('Đơn hàng không còn ở trạng thái chờ thanh toán. Hãy kiểm tra lịch sử đơn.');
+                }
+                // Không dùng lại đơn PENDING của giỏ cũ khi khách đã chỉnh món / coupon / điểm.
+                const signature = (items: OrderItem[]) => items.map(item => JSON.stringify({
+                    productId: item.productId, size: item.size, qty: item.qty,
+                    sugar: item.sugar || '100%', ice: item.ice || '100%',
+                    note: (item.note || '').trim(),
+                    toppings: (item.toppings || []).map(t => `${t.toppingId}:${t.servings}`).sort(),
+                })).sort().join('|');
+                if (!existingOrder.items || signature(existingOrder.items) !== signature(orderItems) ||
+                    existingOrder.pointsUsed !== actualPointsToUse ||
+                    (existingOrder.couponCode || '').toUpperCase() !== (appliedPromo?.code || '').toUpperCase() ||
+                    existingOrder.total !== finalPayablePrice) {
+                    throw new Error('Đơn đang chờ khác giỏ hàng hiện tại (món, điểm hoặc tổng tiền). ' +
+                        'Không thu tiền cho đơn cũ. Hãy xem lịch sử đơn và chỉ tiếp tục đúng đơn hàng.');
                 }
                 officialTotal = existingOrder.total;
                 officialCode = existingOrder.orderCode;
@@ -840,7 +1002,9 @@ function UngDungDatNuoc() {
                 }
                 if (currentGateway.payment?.status === 'PENDING') {
                     // Khôi phục đúng URL đã lưu, không tạo giao dịch/app_trans_id mới.
-                    if (currentGateway.payment.method === 'ZALOPAY' &&
+                    if (!currentGateway.awaitingGateway &&
+                        (!currentGateway.expiresAt || Date.parse(currentGateway.expiresAt) > Date.now()) &&
+                        currentGateway.payment.method === 'ZALOPAY' &&
                         (currentGateway.payment.qrCode || currentGateway.payment.paymentUrl)) {
                         hienQrTrongThanhToan({ orderId, orderCode: officialCode,
                             amount: officialTotal, qrCode: currentGateway.payment.qrCode || null,
@@ -855,10 +1019,14 @@ function UngDungDatNuoc() {
                 if (currentGateway.payment?.status === 'FAILED') resetPaymentKey(orderId, 'ZALOPAY', false);
                 const idempotencyKey = getPaymentKey(orderId, 'ZALOPAY', false);
                 const zalopay = await api.createZalopayPayment(orderId, idempotencyKey);
-                if (zalopay.qrCode || zalopay.paymentUrl || zalopay.status === 'SUCCESS') {
+                if (zalopay.status === 'SUCCESS') {
+                    await khoiPhucDonZalopay(orderId);
+                    return;
+                }
+                if (zalopay.qrCode || zalopay.paymentUrl) {
                     hienQrTrongThanhToan({ orderId, orderCode: officialCode,
                         amount: officialTotal, qrCode: zalopay.qrCode || null,
-                        paymentUrl: zalopay.paymentUrl || null });
+                        paymentUrl: zalopay.paymentUrl || null, expiresAt: zalopay.expiresAt || null });
                 } else {
                     throw new Error('ZaloPay đã tạo giao dịch nhưng chưa có QR/URL hợp lệ; nhờ ADMIN đối soát.');
                 }
@@ -876,36 +1044,13 @@ function UngDungDatNuoc() {
             }
 
             if (payRes.status === 'PAID') {
-                const paidOrder: Order = {
-                    id: orderId,
-                    userId: user?.id || 'usr_me',
-                    status: 'PAID',
-                    total: payRes.total ?? officialTotal,
-                    orderCode: officialCode,
-                    createdAt: createdAtFormatted,
-                    items: orderItems,
-                };
-
-                capNhatLichSuDon((prev) =>
-                    prev.map((o) =>
-                        o.id === orderId ? { ...o, status: 'PAID', items: o.items || orderItems } : o
-                    )
-                );
-                queryClient.invalidateQueries({ queryKey: QUERY_KEYS.lichSuDon });
-
-                if (!payRes.isDuplicate) {
-                    // Tồn kho quản lý theo nguyên liệu ở backend, không trừ số ly giả trên UI.
-                    const earnedPoints = payRes.earnedPoints ?? Math.floor(officialTotal / 10000);
-                    if (user) {
-                        const updatedUser: User = {
-                            ...user,
-                            loyaltyPoints: Math.max(0, user.loyaltyPoints - actualPointsToUse) + earnedPoints,
-                        };
-                        setUser(updatedUser);
-                        setStoredUser(updatedUser);
-                    }
+                const orders = await api.getMyOrders();
+                const paidOrder = orders.find(o => o.id === orderId);
+                if (!paidOrder || !['PAID', 'PREPARING', 'READY', 'COMPLETED'].includes(paidOrder.status)) {
+                    throw new Error('Máy chủ đã nhận thanh toán nhưng chưa đồng bộ đơn. Hãy kiểm tra lịch sử.');
                 }
-
+                setOrderHistory(orders);
+                queryClient.invalidateQueries({ queryKey: QUERY_KEYS.lichSuDon });
                 setLastOrder(paidOrder);
                 sessionStorage.removeItem('brewlite_create_key');
                 clearCart();
@@ -915,7 +1060,7 @@ function UngDungDatNuoc() {
                 paymentKeysRef.current = {};
                 setCheckoutStatus(null);
                 setSimulatePaymentError(false);
-                api.getMe().then(me => {setUser(me); setStoredUser(me);}).catch(() => {});
+                void api.getMe().then(me => { setUser(me); setStoredUser(me); }).catch(() => {});
                 setManHinhHienTai('success');
             } else {
                 capNhatLichSuDon((prev) =>
@@ -930,7 +1075,7 @@ function UngDungDatNuoc() {
                     const history = await api.getMyOrders();
                     setOrderHistory(history);
                     const latest = history.find(o => o.id === attemptedOrderId);
-                    if (latest?.status === 'PAID') {
+                    if (latest && ['PAID', 'PREPARING', 'READY', 'COMPLETED'].includes(latest.status)) {
                         setLastOrder(latest);
                         clearCart();
                         sessionStorage.removeItem('brewlite_create_key');
@@ -946,7 +1091,49 @@ function UngDungDatNuoc() {
             }
             setStockError(error?.message || 'Chưa xác định được kết quả thanh toán. Kiểm tra lại trạng thái đơn trước khi thử lại.');
         } finally {
+            checkoutInFlightRef.current = false;
             setCheckoutLoading(false);
+        }
+    };
+
+    const moTaKiemTraZalopay = (result: ZalopayStatusResult): string => {
+        const verification = result.verification;
+        if (!verification) return 'Đã đọc trạng thái lưu tại Backend; chưa có kết quả QueryDR mới.';
+        switch (verification.outcome) {
+            case 'SUCCESS': return 'ZaloPay đã xác nhận thanh toán. Đang cập nhật đơn hàng...';
+            case 'PENDING': return 'Đã hỏi ZaloPay (mã 3): giao dịch chưa thanh toán hoặc vẫn đang xử lý. Không thanh toán lần nữa.';
+            case 'CONFIG_ERROR': return `ZaloPay từ chối truy vấn (mã ${verification.subReturnCode ?? '?'}) – kiểm tra AppID/Key1 đang dùng. Nếu đã đổi bộ khóa sau khi tạo đơn, phải đối soát bằng đúng bộ khóa cũ; không tạo lại giao dịch.`;
+            case 'NOT_CONFIRMED': return `ZaloPay chưa xác nhận thu tiền (mã ${verification.returnCode ?? '?'}, mã phụ ${verification.subReturnCode ?? '?'}). Giữ nguyên đơn và kiểm tra lại, không thanh toán thêm.`;
+            case 'RATE_LIMITED': return `Chưa gửi truy vấn mới vì cần chờ ${verification.retryAfterSeconds ?? 60} giây giữa hai lần kiểm tra ZaloPay.`;
+            case 'ERROR': return 'Không thể truy vấn ZaloPay lúc này (mạng, cổng thanh toán hoặc đối soát lỗi). Đơn vẫn chờ; không trả tiền lần nữa.';
+            case 'NEEDS_RECONCILIATION': return 'Đã xác nhận tiền nhưng Backend chưa hoàn tất đơn. Cần ADMIN kiểm tra trạng thái kho và giao dịch.';
+            default: return 'Đã kiểm tra. Trạng thái đơn hiện được lưu tại Backend.';
+        }
+    };
+
+    const xuLyKiemTraThanhToanZalopay = async () => {
+        if (!zalopayCheckout || zalopayVerifying) return;
+        setZalopayVerifying(true);
+        setZalopayMessage('Đang yêu cầu Backend kiểm tra giao dịch với ZaloPay...');
+        try {
+            // Không chấp nhận lời báo "đã trả tiền" của người dùng làm bằng chứng PAID.
+            const orderId = zalopayCheckout.orderId;
+            const verificationResult = await api.verifyZalopayPayment(orderId);
+            // Nếu đã PAID, làm mới lịch sử và chuyển sang màn thành công.
+            if (['PAID', 'PREPARING', 'READY', 'COMPLETED'].includes(verificationResult.orderStatus) ||
+                verificationResult.payment?.status === 'FAILED') {
+                await khoiPhucDonZalopay(orderId);
+            } else {
+                setZalopayMessage(moTaKiemTraZalopay(verificationResult));
+                if (verificationResult.requiresReconciliation ||
+                    verificationResult.verification?.outcome === 'NEEDS_RECONCILIATION') {
+                    setZalopayNeedsReconciliation(true);
+                }
+            }
+        } catch (error: any) {
+            setZalopayMessage(error?.message || 'Chưa kiểm tra được ZaloPay, vui lòng thử lại sau.');
+        } finally {
+            setZalopayVerifying(false);
         }
     };
 
@@ -1005,6 +1192,9 @@ function UngDungDatNuoc() {
                 throw new Error('ZaloPay đã ghi nhận thanh toán nhưng đơn cần đối soát. KHÔNG thanh toán lại.');
             }
             if (gateway.payment?.status === 'PENDING') {
+                if (gateway.awaitingGateway || (gateway.expiresAt && Date.parse(gateway.expiresAt) <= Date.now())) {
+                    throw new Error('Giao dịch đã hết hạn hoặc đang chờ đối soát. Không quét QR hay tạo giao dịch mới.');
+                }
                 if (gateway.payment.method === 'ZALOPAY' &&
                     (gateway.payment.qrCode || gateway.payment.paymentUrl)) {
                     hienQrTrongThanhToan({ orderId, orderCode: order.orderCode,
@@ -1023,10 +1213,14 @@ function UngDungDatNuoc() {
                 if (gateway.payment?.status === 'FAILED') resetPaymentKey(orderId, 'ZALOPAY', false);
                 const idempotencyKey = getPaymentKey(orderId, 'ZALOPAY', false);
                 const payment = await api.createZalopayPayment(orderId, idempotencyKey);
-                if (payment.qrCode || payment.paymentUrl || payment.status === 'SUCCESS') {
+                if (payment.status === 'SUCCESS') {
+                    await khoiPhucDonZalopay(orderId);
+                    return;
+                }
+                if (payment.qrCode || payment.paymentUrl) {
                     hienQrTrongThanhToan({ orderId, orderCode: order.orderCode,
                         amount: order.total, qrCode: payment.qrCode || null,
-                        paymentUrl: payment.paymentUrl || null });
+                        paymentUrl: payment.paymentUrl || null, expiresAt: payment.expiresAt || null });
                 } else {
                     throw new Error('ZaloPay chưa trả QR/URL hợp lệ; vui lòng nhờ ADMIN đối soát.');
                 }
@@ -1069,20 +1263,39 @@ function UngDungDatNuoc() {
     };
 
     const xuLyChuyenTrangThaiDon = async (orderId: string, targetStatus: OrderStatus) => {
-        if (targetStatus !== 'CANCELLED') return;
+        if (targetStatus !== 'CANCELLED' || cancellingOrderId) return;
         const order = orderHistory.find(o => o.id === orderId) ||
             (lastOrder?.id === orderId ? lastOrder : null);
-        if (!order) return;
-        try { assertTransition(order.status, targetStatus); }
-        catch { return; }
+        if (!order) {
+            setStatusNotice({ type: 'error', orderId, message: 'Không tìm thấy đơn hàng. Hãy tải lại lịch sử.' });
+            return;
+        }
         try {
-            await api.transitionOrderStatus(orderId, targetStatus);
-            await taiDanhSachMon();
-            api.getMe().then(me => {setUser(me); setStoredUser(me);}).catch(() => {});
-            capNhatLichSuDon(prev => prev.map(o => o.id === orderId ? { ...o, status: targetStatus } : o));
-            if (lastOrder?.id === orderId) setLastOrder({ ...lastOrder, status: targetStatus });
-            // Hủy từ lịch sử cũng phải dọn checkout nếu đang theo dõi chính đơn này.
-            // Giữ nguyên giỏ hàng để khách có thể chỉnh sửa và đặt lại.
+            assertTransition(order.status, targetStatus);
+        } catch (error: any) {
+            setStatusNotice({ type: 'error', orderId, message: error?.message || 'Trạng thái này không cho phép hủy.' });
+            return;
+        }
+        const isPaid = order.status === 'PAID';
+        const warning = isPaid
+            ? order.total > 0
+                ? `Hủy đơn #${order.orderCode ?? order.id}? Hệ thống chỉ ghi nhận hoàn ${formatPrice(order.total)} MÔ PHỎNG trong BrewLite. ZaloPay Sandbox KHÔNG chuyển tiền thật về ví.`
+                : `Hủy đơn #${order.orderCode ?? order.id}? Đơn 0đ không phát sinh hoàn tiền.`
+            : `Bạn muốn hủy đơn #${order.orderCode ?? order.id}?`;
+        if (!window.confirm(warning)) return;
+        setCancellingOrderId(orderId);
+        setStatusNotice(null);
+        try {
+            const result = await api.transitionOrderStatus(orderId, targetStatus);
+            // Dùng dữ liệu thực tế trả về từ Backend, không tự giả định hoàn tiền.
+            capNhatLichSuDon(prev => prev.map(o => o.id === orderId ? {
+                ...o, ...result.order, status: 'CANCELLED',
+                simulatedRefundAmount: result.refund?.amount ?? o.simulatedRefundAmount,
+            } : o));
+            if (lastOrder?.id === orderId) setLastOrder({
+                ...lastOrder, ...result.order, status: 'CANCELLED',
+                simulatedRefundAmount: result.refund?.amount ?? lastOrder.simulatedRefundAmount,
+            });
             if (currentPendingOrderId === orderId) {
                 setCurrentPendingOrderId(null);
                 setZalopayCheckout(null);
@@ -1099,16 +1312,23 @@ function UngDungDatNuoc() {
                 if (signature.startsWith(`${orderId}:`)) delete paymentKeysRef.current[signature];
             }
             for (const storageKey of Object.keys(sessionStorage)) {
-                if (storageKey.startsWith(`brewlite_payment_key_${orderId}:`)) {
-                    sessionStorage.removeItem(storageKey);
-                }
+                if (storageKey.startsWith(`brewlite_payment_key_${orderId}:`)) sessionStorage.removeItem(storageKey);
             }
             queryClient.invalidateQueries({ queryKey: QUERY_KEYS.lichSuDon });
-            setStatusNotice({ type: 'success', orderId,
-                message: `Đơn #${order.orderCode ?? orderId} đã hủy thành công.` });
+            // Nếu tải lại thất bại vì mạng, đơn vẫn đã hủy; không đưa ra thông báo hủy lỗi.
+            void api.getMyOrders().then(setOrderHistory).catch(() => {});
+            void api.getMe().then(me => { setUser(me); setStoredUser(me); }).catch(() => {});
+            void taiDanhSachMon().catch(() => {});
+            const refund = result.refund;
+            const message = refund?.mode === 'SIMULATED' && refund.amount > 0
+                ? `Đơn #${order.orderCode ?? orderId} đã hủy. Hoàn ${formatPrice(refund.amount)} MÔ PHỎNG trong BrewLite; ZaloPay không hoàn tiền thật.`
+                : `Đơn #${order.orderCode ?? orderId} đã hủy thành công (không phát sinh hoàn tiền).`;
+            setStatusNotice({ type: 'success', orderId, message });
         } catch (error: any) {
             setStatusNotice({ type: 'error', orderId,
-                message: error?.message || 'Không thể hủy đơn' });
+                message: error?.message || 'Không thể hủy đơn. Vui lòng thử lại.' });
+        } finally {
+            setCancellingOrderId(null);
         }
     };
 
@@ -1239,6 +1459,8 @@ function UngDungDatNuoc() {
                         discountAmount={discountAmount}
                         totalCartPrice={totalCartPrice}
                         cartLines={cartLines}
+                        checkoutOrder={orderHistory.find(order => order.id === zalopayCheckout?.orderId) ?? null}
+                        productCatalog={products}
                         promoCodeInput={promoCodeInput}
                         setPromoCodeInput={setPromoCodeInput}
                         appliedPromo={appliedPromo}
@@ -1262,16 +1484,20 @@ function UngDungDatNuoc() {
                         walletType={walletType}
                         setWalletType={setWalletType}
                         onBackToCart={() => {
-                            if (zalopayCheckout) {
+                            if (zalopayCheckout || currentPendingOrderId) {
+                                // Không tự hủy đơn khi khách chỉ muốn quay lại.
                                 void taiLichSuDon();
                                 setManHinhHienTai('history');
-                            } else if (currentPendingOrderId) void xuLyHuyDonDangThanhToan();
-                            else setManHinhHienTai('cart');
+                            } else setManHinhHienTai('cart');
                         }}
                         onRetryPayment={xuLyThuLaiThanhToan}
                         onCancelCurrentOrder={xuLyHuyDonDangThanhToan}
                         onConfirmPay={xuLyXacNhanThanhToan}
+                        onVerifyZalopay={xuLyKiemTraThanhToanZalopay}
+                        zalopayVerifying={zalopayVerifying}
                         zalopayCheckout={zalopayCheckout}
+                        showZalopayQr={showZalopayQr}
+                        onRevealZalopayQr={() => setShowZalopayQr(true)}
                         zalopayMessage={zalopayMessage}
                         zalopayNeedsReconciliation={zalopayNeedsReconciliation}
                     />
@@ -1290,6 +1516,7 @@ function UngDungDatNuoc() {
                             setManHinhHienTai('history');
                         }}
                         onTransitionOrder={xuLyChuyenTrangThaiDon}
+                        cancellingOrderId={cancellingOrderId}
                         statusNotice={statusNotice}
                         onClearNotice={() => setStatusNotice(null)}
                     />
@@ -1306,6 +1533,7 @@ function UngDungDatNuoc() {
                             setManHinhHienTai('menu');
                         }}
                         onTransition={xuLyChuyenTrangThaiDon}
+                        cancellingOrderId={cancellingOrderId}
                         onRetryFromHistory={(orderId, method) => void xuLyThuLaiTuLichSu(orderId, method)}
                         statusNotice={statusNotice}
                         onClearNotice={() => setStatusNotice(null)}

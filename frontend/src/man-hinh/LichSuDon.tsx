@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
 import { Order, OrderStatus, Product, User, formatPrice } from '../api';
 
@@ -114,6 +114,7 @@ interface LichSuDonProps {
     products: Product[];
     onBackToMenu: () => void;
     onTransition: (orderId: string, targetStatus: OrderStatus) => void;
+    cancellingOrderId?: string | null;
     onRetryFromHistory: (orderId: string, method: 'ZALOPAY' | 'WALLET' | 'CARD') => void;
     statusNotice?: { type: 'success' | 'error' | 'ready'; message: string; orderId?: string } | null;
     onClearNotice?: () => void;
@@ -126,11 +127,17 @@ export const LichSuDon: React.FC<LichSuDonProps> = ({
                                                         products,
                                                         onBackToMenu,
                                                         onTransition,
+                                                        cancellingOrderId,
                                                         onRetryFromHistory,
                                                         statusNotice,
                                                         onClearNotice,
                                                     }) => {
     const [retryMethodByOrder, setRetryMethodByOrder] = useState<Record<string, 'ZALOPAY' | 'WALLET' | 'CARD'>>({});
+    const [now, setNow] = useState(() => Date.now());
+    useEffect(() => {
+        const timer = window.setInterval(() => setNow(Date.now()), 1000);
+        return () => window.clearInterval(timer);
+    }, []);
     const layTenTrangThai = (status: OrderStatus) => {
         switch (status) {
             case 'PENDING':
@@ -203,10 +210,28 @@ export const LichSuDon: React.FC<LichSuDonProps> = ({
                     ) : (
                         orderHistory.map((order) => {
                             const status = order.status;
-                            const choPhepKhachThaoTac =
-                                status === 'PENDING' || status === 'PAYMENT_FAILED' || status === 'PAID';
-                            const coTheHuy = !order.pendingZalopay && !order.paidWithZalopay;
+                            const hasExpired = !!order.expiresAt && Number.isFinite(Date.parse(order.expiresAt)) &&
+                                Date.parse(order.expiresAt) <= now;
+                            const expiredBeforePayment = hasExpired &&
+                                (status === 'PENDING' || status === 'PAYMENT_FAILED');
+                            const expiredGatewayUncertain = expiredBeforePayment &&
+                                (order.pendingZalopay || order.paidWithZalopay);
+                            const visibleStatus = expiredGatewayUncertain
+                                ? 'Hết hạn – chờ đối soát'
+                                : expiredBeforePayment ? 'Hết hạn – chờ xác nhận hủy'
+                                : layTenTrangThai(status);
+                            // Không cung cấp nút thanh toán/hủy cho đơn quá hạn.
+                            // Chỉ Backend mới được chuyển trạng thái CANCELLED khi đã an toàn.
+                            const choPhepKhachThaoTac = !expiredBeforePayment &&
+                                (status === 'PENDING' || status === 'PAYMENT_FAILED' || status === 'PAID');
+                            // PDF: PAID -> CANCELLED được phép trước khi barista bắt đầu pha chế.
+                            // Giao dịch gateway PENDING vẫn bị Backend chặn để bảo vệ tiền khách.
+                            const coTheHuy = status === 'PAID' ||
+                                ((status === 'PENDING' || status === 'PAYMENT_FAILED') &&
+                                    !order.pendingZalopay && !order.paidWithZalopay);
                             const coTheThuLai = !order.pendingZalopay && !order.paidWithZalopay;
+                            const coTheXemLaiQr = order.pendingZalopay && !order.paidWithZalopay &&
+                                (status === 'PENDING' || status === 'PAYMENT_FAILED');
 
                             return (
                                 <div
@@ -230,11 +255,17 @@ export const LichSuDon: React.FC<LichSuDonProps> = ({
                                                     : 'border-[#D5CCB4] bg-[#EDE6D1] text-[#124E35]'
                                             }`}
                                         >
-                      {layTenTrangThai(status)}
+                      {visibleStatus}
                     </span>
                                     </div>
 
-                                    <TienTrinhDon status={status} />
+                                    {expiredBeforePayment ? (
+                                        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                                            {expiredGatewayUncertain
+                                                ? 'Đã hết thời gian quét QR. Hệ thống đang xác minh với ZaloPay; không thanh toán thêm hoặc tạo giao dịch khác cho đơn này.'
+                                                : 'Đơn đã quá hạn thanh toán, hệ thống đang cập nhật trạng thái hủy.'}
+                                        </div>
+                                    ) : <TienTrinhDon status={status} />}
                                     {status === 'READY' && <div className="px-3 py-3 bg-[#EDE6D1] rounded-lg text-xs">
                                         Đồ uống đã pha xong. Vui lòng tới quầy nhận đơn #{order.orderCode ?? order.id}.
                                     </div>}
@@ -290,19 +321,32 @@ export const LichSuDon: React.FC<LichSuDonProps> = ({
                     </span>
                                     </div>
 
+                                    {status === 'CANCELLED' && Number(order.simulatedRefundAmount || 0) > 0 && (
+                                        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                                            Đã ghi nhận hoàn <strong>{formatPrice(order.simulatedRefundAmount || 0)}</strong> mô phỏng trong BrewLite.
+                                            Đây không phải giao dịch hoàn tiền thật qua ZaloPay.
+                                        </div>
+                                    )}
                                     {choPhepKhachThaoTac && (
                                         <div className="pt-2.5 border-t border-[#E2D9C0] flex flex-wrap gap-2 justify-end">
                                             {coTheHuy ? <button
                                                 type="button"
+                                                disabled={Boolean(cancellingOrderId)}
                                                 onClick={() => onTransition(order.id, 'CANCELLED')}
-                                                className="px-3.5 py-1.5 border border-[#D5CCB4] bg-[#EDE6D1] rounded-lg text-xs font-semibold text-[#124E35] cursor-pointer hover:bg-[#124E35] hover:text-[#F5F0E1] transition-colors"
+                                                className="disabled:opacity-50 disabled:cursor-wait px-3.5 py-1.5 border border-[#D5CCB4] bg-[#EDE6D1] rounded-lg text-xs font-semibold text-[#124E35] cursor-pointer hover:bg-[#124E35] hover:text-[#F5F0E1] transition-colors"
                                             >
-                                                Hủy đơn
+                                                {cancellingOrderId === order.id ? 'Đang xử lý...' :
+                                                    status === 'PAID' ? 'Hủy đơn / Hoàn mô phỏng' : 'Hủy đơn'}
                                             </button> : <span className="text-xs text-amber-700 py-1.5">
-                                                {order.paidWithZalopay
-                                                    ? 'ZaloPay đã thu tiền: liên hệ cửa hàng để kiểm tra/hoàn tiền.'
-                                                    : 'ZaloPay đang chờ xác nhận: không hủy hoặc thanh toán lại.'}
+                                                Giao dịch đang chờ xác minh: kiểm tra trạng thái thanh toán trước khi hủy.
                                             </span>}
+                                            {coTheXemLaiQr && (
+                                                <button type="button"
+                                                    onClick={() => onRetryFromHistory(order.id, 'ZALOPAY')}
+                                                    className="px-3.5 py-1.5 bg-[#124E35] text-[#F5F0E1] rounded-lg text-xs font-semibold cursor-pointer hover:opacity-95">
+                                                    Xem lại QR / Kiểm tra giao dịch
+                                                </button>
+                                            )}
                                             {coTheThuLai && (status === 'PENDING' || status === 'PAYMENT_FAILED') && (
                                                 <div className="flex flex-wrap items-center gap-2">
                                                     {order.total > 0 && (

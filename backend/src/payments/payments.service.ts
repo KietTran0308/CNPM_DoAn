@@ -1,5 +1,5 @@
 import {
-    BadGatewayException, BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException,
+    BadGatewayException, BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException,
 } from '@nestjs/common';
 import { OrderStatus, PaymentMethod, PaymentStatus, Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
@@ -18,6 +18,74 @@ export class PaymentsService {
         private readonly zalopayService: ZalopayService,
         private readonly ordersService: OrdersService,
     ) {}
+
+    // Hạn chế QueryDR từ màn hình khách hàng: tối đa một lần / 60 giây / đơn / instance.
+    // Backend vẫn kiểm tra quyền sở hữu trước khi sử dụng cache này.
+    private readonly customerQueryTimes = new Map<string, number>();
+
+    // QueryDR dự phòng khi callback ZaloPay bị mất. Không cần mở trang khách hàng.
+    // Không thêm bảng/cột, không thay đổi giới hạn QueryDR của API khách hàng.
+    private readonly reconcileLogger = new Logger(PaymentsService.name);
+    private reconcileTimer?: ReturnType<typeof setInterval>;
+    private reconcileRunning = false;
+    private reconcileOffset = 0;
+
+    onModuleInit() {
+        if (process.env.NODE_ENV === 'test' || process.env.ZALOPAY_AUTO_RECONCILE === 'false') return;
+        // Kiểm tra khi Backend khởi động lại, sau đó mỗi 2 phút.
+        void this.reconcilePendingZalopay();
+        this.reconcileTimer = setInterval(() => { void this.reconcilePendingZalopay(); }, 120_000);
+    }
+
+    onModuleDestroy() {
+        if (this.reconcileTimer) clearInterval(this.reconcileTimer);
+    }
+
+    private async reconcilePendingZalopay() {
+        if (this.reconcileRunning) return;
+        this.reconcileRunning = true;
+        try {
+            // Callback có thể đã lưu SUCCESS nhưng finalize đơn bị lỗi giữa chừng.
+            const paidButNotFinalized = await this.prisma.payment.findMany({
+                where: { method: PaymentMethod.ZALOPAY, status: PaymentStatus.SUCCESS,
+                    order: { status: { in: [OrderStatus.PENDING, OrderStatus.PAYMENT_FAILED] } } },
+                select: { orderId: true }, orderBy: { createdAt: 'asc' }, take: 10,
+            });
+            for (const payment of paidButNotFinalized) {
+                try { await this.finalizeConfirmedZalopay(payment.orderId); }
+                catch {
+                    this.reconcileLogger.warn(`Đơn ${payment.orderId} đã nhận tiền nhưng chưa hoàn tất; cần đối soát`);
+                }
+            }
+
+            // Chỉ QueryDR giao dịch đã tạo >= 1 phút. Giới hạn 10 giao dịch/lượt;
+            // quay vòng qua các đơn để đơn PENDING lâu không chiếm mọi lượt.
+            const where: Prisma.PaymentWhereInput = {
+                method: PaymentMethod.ZALOPAY, status: PaymentStatus.PENDING,
+                providerRef: { not: null }, createdAt: { lte: new Date(Date.now() - 60_000) },
+            };
+            const count = await this.prisma.payment.count({ where });
+            if (count === 0) { this.reconcileOffset = 0; return; }
+            const skip = this.reconcileOffset >= count ? 0 : this.reconcileOffset;
+            const pending = await this.prisma.payment.findMany({
+                where, select: { orderId: true }, orderBy: { createdAt: 'asc' },
+                skip, take: 10,
+            });
+            this.reconcileOffset = (skip + pending.length) % count;
+            for (const payment of pending) {
+                try { await this.recheckZalopay('ADMIN', payment.orderId); }
+                catch {
+                    // Timeout / trạng thái không chắc chắn: không tự FAILED, không nhả giữ kho/điểm.
+                    this.reconcileLogger.warn(`Chưa đối soát được ZaloPay cho đơn ${payment.orderId}`);
+                }
+            }
+        } catch {
+            // Lỗi DB hoặc mạng không được gây crash Backend hay đổi trạng thái tiền.
+            this.reconcileLogger.warn('Không chạy được lượt đối soát tự động; sẽ thử lại sau');
+        } finally {
+            this.reconcileRunning = false;
+        }
+    }
 
     private key(value: string | undefined): string {
         const key = value?.trim() || '';
@@ -62,22 +130,32 @@ export class PaymentsService {
         if (order.couponId) {
             const coupon = await tx.coupon.findUniqueOrThrow({ where: { id: order.couponId } });
             const now = new Date();
-            const updated = await tx.coupon.updateMany({
-                where: { id: coupon.id, isActive: true, usedCount: { lt: coupon.maxUses },
-                    validFrom: { lte: now }, validTo: { gt: now },
-                    minOrderValue: { lte: order.subtotal } },
-                data: { usedCount: { increment: 1 } },
-            });
-            if (updated.count !== 1) throw new ConflictException('Coupon không còn hợp lệ');
+            const held = order.reservationStatus === 'HELD';
+            const updated = held
+                ? await tx.coupon.updateMany({
+                    // Lượt đã giữ lúc tạo đơn: không kiểm tra lại hạn sử dụng tại callback.
+                    where: { id: coupon.id, reservedCount: { gt: 0 } },
+                    data: { reservedCount: { decrement: 1 }, usedCount: { increment: 1 } },
+                })
+                : await tx.coupon.updateMany({
+                    // Đơn tạo trước migration vẫn theo ràng buộc cũ, nhưng tính cả lượt đã giữ.
+                    where: { id: coupon.id, isActive: true,
+                        usedCount: { lt: coupon.maxUses - coupon.reservedCount },
+                        validFrom: { lte: now }, validTo: { gt: now },
+                        minOrderValue: { lte: order.subtotal } },
+                    data: { usedCount: { increment: 1 } },
+                });
+            if (updated.count !== 1) throw new ConflictException('Lượt coupon không còn hợp lệ');
             const voucher = await tx.userVoucher.findUnique({
                 where: { userId_couponId: { userId: order.userId, couponId: coupon.id } },
             });
             if (voucher) {
                 const consumed = await tx.userVoucher.updateMany({
-                    where: { id: voucher.id, usedAt: null, usedOrderId: null },
-                    data: { usedAt: now, usedOrderId: orderId },
+                    where: { id: voucher.id, usedAt: null, usedOrderId: null,
+                        reservedOrderId: held ? orderId : null },
+                    data: { usedAt: now, usedOrderId: orderId, reservedOrderId: null },
                 });
-                if (consumed.count !== 1) throw new ConflictException('Voucher đã được sử dụng');
+                if (consumed.count !== 1) throw new ConflictException('Voucher đang được giữ cho đơn khác');
             } else {
                 const privateVoucher = await tx.userVoucher.findFirst({ where: { couponId: coupon.id } });
                 if (privateVoucher) throw new ForbiddenException('Voucher không thuộc tài khoản');
@@ -85,11 +163,16 @@ export class PaymentsService {
         }
 
         if (order.pointsUsed > 0) {
+            const held = order.reservationStatus === 'HELD';
+            const user = await tx.user.findUniqueOrThrow({ where: { id: order.userId } });
             const spent = await tx.user.updateMany({
-                where: { id: order.userId, loyaltyPoints: { gte: order.pointsUsed } },
-                data: { loyaltyPoints: { decrement: order.pointsUsed } },
+                where: { id: order.userId,
+                    loyaltyPoints: { gte: held ? order.pointsUsed : order.pointsUsed + user.reservedPoints },
+                    ...(held ? { reservedPoints: { gte: order.pointsUsed } } : {}) },
+                data: { loyaltyPoints: { decrement: order.pointsUsed },
+                    ...(held ? { reservedPoints: { decrement: order.pointsUsed } } : {}) },
             });
-            if (spent.count !== 1) throw new ConflictException('Không đủ điểm thưởng');
+            if (spent.count !== 1) throw new ConflictException('Không đủ điểm thưởng khả dụng');
             await tx.loyaltyTransaction.create({
                 data: { orderId, userId: order.userId, type: 'REDEEM', points: order.pointsUsed },
             });
@@ -97,7 +180,8 @@ export class PaymentsService {
 
         const changed = await tx.order.updateMany({
             where: { id: orderId, status: OrderStatus.PENDING },
-            data: { status: OrderStatus.PAID, updatedAt: new Date() },
+            data: { status: OrderStatus.PAID, updatedAt: new Date(),
+                ...(order.reservationStatus === 'HELD' ? { reservationStatus: 'CONSUMED' } : {}) },
         });
         if (changed.count !== 1) throw new ConflictException('Đơn đã được xử lý');
         await tx.orderStatusHistory.create({
@@ -291,7 +375,8 @@ export class PaymentsService {
         }
         if (payment.zpOrderUrl || payment.zpQrCode) {
             return { paymentId: payment.id, orderId, amount: Number(payment.amount),
-                status: payment.status, paymentUrl: payment.zpOrderUrl, qrCode: payment.zpQrCode };
+                status: payment.status, paymentUrl: payment.zpOrderUrl, qrCode: payment.zpQrCode,
+                expiresAt: payment.order.expiresAt };
         }
         if (!wasCreated) {
             throw new ConflictException('Giao dịch ZaloPay đang chờ xác minh. Không tạo yêu cầu mới; hãy đối soát.');
@@ -340,7 +425,8 @@ export class PaymentsService {
         const current = await this.prisma.payment.findUniqueOrThrow({ where: { id: payment.id } });
         return { paymentId: payment.id, orderId, amount: Number(payment.amount),
             status: current.status, paymentUrl: current.status === PaymentStatus.PENDING ? current.zpOrderUrl : null,
-            qrCode: current.status === PaymentStatus.PENDING ? current.zpQrCode : null };
+            qrCode: current.status === PaymentStatus.PENDING ? current.zpQrCode : null,
+            expiresAt: payment.order.expiresAt };
     }
 
     private async finalizeConfirmedZalopay(orderId: string) {
@@ -472,6 +558,23 @@ export class PaymentsService {
                     });
                 }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
             }
+            // Gateway đã xác nhận giao dịch thất bại/hết hạn: kết thúc luôn đơn
+            // và hoàn tài nguyên giữ trước. Tuyệt đối KHÔNG hủy nếu kết quả QueryDR
+            // vẫn PENDING/không rõ hoặc đã SUCCESS.
+            if (payment.order.expiresAt <= new Date()) {
+                try {
+                    const freshOrder = await this.prisma.order.findUnique({
+                        where: { id: orderId }, select: { status: true },
+                    });
+                    if (freshOrder?.status === OrderStatus.PENDING ||
+                        freshOrder?.status === OrderStatus.PAYMENT_FAILED) {
+                        await this.ordersService.cancel(orderId, payment.order.userId);
+                    }
+                } catch {
+                    // Scheduler OrdersService cũng hủy đơn hết hạn mỗi phút.
+                    this.reconcileLogger.warn(`Chưa hoàn tất hủy đơn ZaloPay hết hạn ${orderId}; sẽ thử lại`);
+                }
+            }
             return { message: oldMissingGatewayOrder
                     ? 'ZaloPay xác nhận không có giao dịch sau 30 phút; đã kết thúc giao dịch lỗi. Đặt đơn mới nếu muốn mua.'
                     : 'ZaloPay xác nhận giao dịch đã hết hạn và thất bại. Đơn đã hết hạn; cần tạo đơn mới nếu muốn mua.',
@@ -481,6 +584,79 @@ export class PaymentsService {
         return { message: gateway.returnCode === 3
                 ? 'Giao dịch còn xử lý; không tạo thanh toán mới'
                 : 'ZaloPay không xác nhận thanh toán thành công. Cần kiểm tra mã lỗi trước khi đóng giao dịch', gateway };
+    }
+
+    // Khách chỉ được yêu cầu máy chủ xác minh giao dịch của CHÍNH mình.
+    // Không nhận số tiền hay trạng thái PAID từ trình duyệt. Tái sử dụng QueryDR với
+    // kiểm tra amount/zpTransId và transaction finalize ở recheckZalopay.
+    async verifyZalopayForCustomer(userId: string, orderId: string) {
+        const order = await this.prisma.order.findFirst({ where: { id: orderId, userId } });
+        if (!order) throw new NotFoundException('Không tìm thấy đơn hàng của bạn');
+        const payment = await this.prisma.payment.findFirst({
+            where: { orderId, method: PaymentMethod.ZALOPAY }, orderBy: { createdAt: 'desc' },
+        });
+        if (!payment) throw new NotFoundException('Đơn chưa có giao dịch ZaloPay');
+
+        // Không dùng xác nhận từ trình duyệt để đổi trạng thái tiền.
+        // Chỉ trả mã kết quả QueryDR an toàn, KHÔNG tiết lộ key, token hoặc URL giao dịch.
+        let verification: {
+            outcome: 'SUCCESS' | 'PENDING' | 'NOT_CONFIRMED' | 'CONFIG_ERROR' |
+                'ERROR' | 'RATE_LIMITED' | 'NEEDS_RECONCILIATION' | 'ALREADY_FINAL';
+            queried: boolean;
+            returnCode?: number;
+            subReturnCode?: number | null;
+            retryAfterSeconds?: number;
+        };
+        if (payment.status === PaymentStatus.SUCCESS &&
+            (order.status === OrderStatus.PENDING || order.status === OrderStatus.PAYMENT_FAILED)) {
+            try {
+                await this.finalizeConfirmedZalopay(orderId);
+                verification = { outcome: 'SUCCESS', queried: false };
+            } catch (error) {
+                this.reconcileLogger.warn(`Giao dịch SUCCESS chưa hoàn tất đơn ${orderId}`);
+                verification = { outcome: 'NEEDS_RECONCILIATION', queried: false };
+            }
+        } else if (payment.status === PaymentStatus.PENDING) {
+            const now = Date.now();
+            const last = this.customerQueryTimes.get(orderId) ?? 0;
+            if (now - last < 60_000) {
+                verification = { outcome: 'RATE_LIMITED', queried: false,
+                    retryAfterSeconds: Math.ceil((60_000 - (now - last)) / 1000) };
+            } else {
+                if (this.customerQueryTimes.size > 3000) this.customerQueryTimes.clear();
+                this.customerQueryTimes.set(orderId, now);
+                try {
+                    const checked = await this.recheckZalopay('ADMIN', orderId);
+                    const gateway = checked.gateway;
+                    if (gateway?.returnCode === 1) {
+                        verification = { outcome: ('requiresReconciliation' in checked && checked.requiresReconciliation === true)
+                                ? 'NEEDS_RECONCILIATION' : 'SUCCESS',
+                            queried: true, returnCode: 1, subReturnCode: gateway.subReturnCode };
+                    } else if (gateway?.returnCode === 3) {
+                        verification = { outcome: 'PENDING', queried: true,
+                            returnCode: 3, subReturnCode: gateway.subReturnCode };
+                    } else if (gateway?.returnCode === 2 &&
+                        [-2, -53, -401, -402, -403].includes(gateway.subReturnCode ?? 0)) {
+                        verification = { outcome: 'CONFIG_ERROR', queried: true,
+                            returnCode: 2, subReturnCode: gateway.subReturnCode };
+                    } else {
+                        verification = { outcome: 'NOT_CONFIRMED', queried: true,
+                            returnCode: gateway?.returnCode, subReturnCode: gateway?.subReturnCode };
+                    }
+                } catch (error) {
+                    // Lỗi mạng không phải xác nhận thất bại; xung đột dữ liệu cũng không
+                    // được âm thầm biến thành PAYMENT_FAILED.
+                    this.customerQueryTimes.set(orderId, Date.now() - 45_000);
+                    verification = error instanceof ConflictException
+                        ? { outcome: 'NEEDS_RECONCILIATION', queried: true }
+                        : { outcome: 'ERROR', queried: false, retryAfterSeconds: 15 };
+                    this.reconcileLogger.warn(`Chưa xác minh được ZaloPay cho đơn ${orderId}`);
+                }
+            }
+        } else {
+            verification = { outcome: 'ALREADY_FINAL', queried: false };
+        }
+        return { ...(await this.getZalopayStatus(userId, orderId)), verification };
     }
 
     async getZalopayStatus(userId: string, orderId: string) {

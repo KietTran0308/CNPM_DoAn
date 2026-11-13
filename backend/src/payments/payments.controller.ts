@@ -41,6 +41,12 @@ export class PaymentsController {
     status(@Req() req: {user: CurrentUser}, @Query('orderId', new ParseUUIDPipe()) orderId: string) {
         return this.paymentsService.getZalopayStatus(req.user.id, orderId);
     }
+    // Chủ đơn tự yêu cầu QueryDR khi callback đến chậm/mất. Có giới hạn tần suất tại Service.
+    @Post('zalopay/verify/:orderId')
+    verifyCustomerPayment(@Req() req: {user: CurrentUser},
+                          @Param('orderId', new ParseUUIDPipe()) orderId: string) {
+        return this.paymentsService.verifyZalopayForCustomer(req.user.id, orderId);
+    }
 }
 
 @Controller('payments/zalopay')

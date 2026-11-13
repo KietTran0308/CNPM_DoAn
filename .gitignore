@@ -7,3 +7,41 @@
 **/dist/
 
 *.log
+
+node_modules/
+dist/
+coverage/
+
+*.tsbuildinfo
+# Do not commit local config or build cache
+.env.local
+
+.pnp
+.pnp.js
+
+# Next.js Build Output
+.next/
+out/
+build/
+# Prisma & Database
+*.sqlite
+*.sqlite-journal
+
+# Environment Variables
+.env*.local
+# Debug and Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+# OS & IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+metadata.json
+bun.lock

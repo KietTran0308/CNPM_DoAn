@@ -33,6 +33,13 @@ export function isValidZalopayQr(value: unknown): value is string {
     return crc.toString(16).toUpperCase().padStart(4, '0') === value.slice(-4).toUpperCase();
 }
 
+// ZaloPay zp_trans_id là số nguyên 64-bit: JSON.parse sẽ làm tròn nếu > Number.MAX_SAFE_INTEGER.
+// Giữ nguyên chuỗi chữ số từ JSON trước khi parse. HMAC callback vẫn kiểm tra trên RAW data.
+export function parseZalopayJsonPreservingId(raw: string): unknown {
+    const safe = raw.replace(/("zp_trans_id"\s*:\s*)([0-9]{1,20})(?=\s*[,}])/g, '$1"$2"');
+    return JSON.parse(safe);
+}
+
 export type ZaloCallback = { data: string; mac: string; type?: number };
 export type ZaloCallbackData = {
     app_id: number; app_trans_id: string; amount: number; zp_trans_id: number | string;
@@ -54,21 +61,25 @@ export class ZalopayService {
             (/YOUR_|PASTE_|REPLACE_|CHANGE_ME/i.test(key1) || /YOUR_|PASTE_|REPLACE_|CHANGE_ME/i.test(key2))) {
             throw new InternalServerErrorException('Cần ZALOPAY_APP_ID, ZALOPAY_KEY1, ZALOPAY_KEY2 do ZaloPay Sandbox cấp');
         }
-        let callback: URL;
-        try { callback = new URL(callbackUrl); }
-        catch { throw new InternalServerErrorException('ZALOPAY_CALLBACK_URL phải là URL HTTPS hợp lệ'); }
-        if (callback.protocol !== 'https:' || callback.pathname !== '/payments/zalopay/callback' ||
-            callback.search || callback.hash || callback.username || callback.password ||
-            /^(?:replace|your)[-.]/i.test(callback.hostname)) {
-            throw new InternalServerErrorException('ZALOPAY_CALLBACK_URL phải trỏ chính xác về HTTPS /payments/zalopay/callback');
+        // callback_url không bắt buộc trong API tạo đơn ZaloPay.
+        // Local Docker không có HTTPS public vẫn tạo đơn và dùng QueryDR tự động.
+        // Render bắt buộc callback HTTPS; không gửi callback sang DB môi trường khác.
+        const localMode = process.env.ZALOPAY_LOCAL_MODE === 'true';
+        if (!callbackUrl && !localMode) {
+            throw new InternalServerErrorException('Render cần ZALOPAY_CALLBACK_URL HTTPS hợp lệ');
         }
-        // Local Docker có PostgreSQL riêng: không thể gửi callback về Render,
-        // vì Render sẽ tìm giao dịch trong DATABASE KHÁC và không cập nhật được đơn local.
-        if (process.env.ZALOPAY_LOCAL_MODE === 'true' && callback.hostname.endsWith('.onrender.com')) {
-            throw new InternalServerErrorException(
-                'Docker local đang trỏ ZALOPAY_CALLBACK_URL về Backend Render. ' +
-                'Hãy dùng HTTPS tunnel chuyển tới localhost:4100/payments/zalopay/callback',
-            );
+        if (callbackUrl) {
+            let callback: URL;
+            try { callback = new URL(callbackUrl); }
+            catch { throw new InternalServerErrorException('ZALOPAY_CALLBACK_URL phải là URL HTTPS hợp lệ'); }
+            if (callback.protocol !== 'https:' || callback.pathname !== '/payments/zalopay/callback' ||
+                callback.search || callback.hash || callback.username || callback.password ||
+                /^(?:replace|your)[-.]/i.test(callback.hostname)) {
+                throw new InternalServerErrorException('ZALOPAY_CALLBACK_URL phải trỏ chính xác về HTTPS /payments/zalopay/callback');
+            }
+            if (localMode && callback.hostname.endsWith('.onrender.com')) {
+                throw new InternalServerErrorException('Docker local không được gửi callback về Backend Render (khác database)');
+            }
         }
         // Tránh gửi Key1 đến domain không thuộc ZaloPay do cấu hình sai.
         for (const [url, path] of [[createUrl, '/v2/create'], [queryUrl, '/v2/query']]) {
@@ -114,7 +125,14 @@ export class ZalopayService {
             throw new ServiceUnavailableException('Không kết nối được ZaloPay; giữ nguyên giao dịch để đối soát');
         }
         if (!response.ok) throw new ServiceUnavailableException('ZaloPay trả lỗi HTTP; cần kiểm tra giao dịch');
-        const json = await response.json().catch(() => null);
+        // Đọc text để không làm tròn zp_trans_id 64-bit của QueryDR.
+        const json = await (async () => {
+            try {
+                return typeof response.text === 'function'
+                    ? parseZalopayJsonPreservingId(await response.text())
+                    : await response.json(); // Fallback cho các response giả lập trong unit test.
+            } catch { return null; }
+        })();
         if (!json || typeof json !== 'object' || Array.isArray(json)) {
             throw new ServiceUnavailableException('ZaloPay trả phản hồi không hợp lệ');
         }
@@ -261,7 +279,8 @@ export class ZalopayService {
             app_user: input.userId.slice(0, 50), amount: input.amount, app_time: appTime,
             expire_duration_seconds: Math.min(1200, remaining),
             item, embed_data: embedData, bank_code: '',
-            callback_url: cfg.callbackUrl,
+            // Chỉ gửi callback_url khi đã cấu hình HTTPS công khai cho đúng backend.
+            ...(cfg.callbackUrl ? { callback_url: cfg.callbackUrl } : {}),
             description: `BrewLite - Thanh toan don ${input.orderId.slice(0, 8)}`,
             mac: '',
         };
@@ -348,7 +367,7 @@ export class ZalopayService {
         const expected = Buffer.from(this.mac(body.data, cfg.key2), 'hex');
         if (!timingSafeEqual(expected, Buffer.from(body.mac, 'hex'))) return null;
         let payload: unknown;
-        try { payload = JSON.parse(body.data); } catch { return null; }
+        try { payload = parseZalopayJsonPreservingId(body.data); } catch { return null; }
         if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null;
         const data = payload as Partial<ZaloCallbackData>;
         if (data.app_id !== cfg.appId || typeof data.app_trans_id !== 'string' ||

@@ -1,3 +1,7 @@
+-- BREWLITE - PostgreSQL 16 - SCHEMA + DU LIEU MAU DAY DU (13/11/2026)
+-- Chi chay tren DATABASE MOI/TRONG. Khong chay lai tren Render da co don/giao dich.
+-- Toan bo bang/constraint giu tru tai nguyen duoc khai bao truc tiep, khong can
+-- chay script ALTER TABLE/UPDATE rieng. File tao database structure, KHONG tao database ten cu the.
 BEGIN;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
@@ -57,13 +61,15 @@ CREATE TABLE public.coupons (
                                 min_order_value numeric(12,2) DEFAULT 0 NOT NULL,
                                 max_uses integer NOT NULL,
                                 used_count integer DEFAULT 0 NOT NULL,
+                                reserved_count integer DEFAULT 0 NOT NULL,
                                 is_active boolean DEFAULT true NOT NULL,
                                 valid_from timestamptz NOT NULL,
                                 valid_to timestamptz NOT NULL,
                                 CONSTRAINT chk_coupons_dates CHECK ((valid_to > valid_from)),
                                 CONSTRAINT chk_coupons_discount CHECK ((((discount_type = 'PERCENT'::public.discount_type) AND (discount_value > (0)::numeric) AND (discount_value <= (100)::numeric)) OR ((discount_type = 'FIXED'::public.discount_type) AND (discount_value > (0)::numeric)))),
                                 CONSTRAINT chk_coupons_min_order CHECK ((min_order_value >= (0)::numeric)),
-                                CONSTRAINT chk_coupons_uses CHECK (((max_uses > 0) AND (used_count >= 0) AND (used_count <= max_uses)))
+                                CONSTRAINT chk_coupons_uses CHECK (((max_uses > 0) AND (used_count >= 0) AND (used_count <= max_uses))),
+                                 CONSTRAINT chk_coupons_reservations CHECK (reserved_count >= 0 AND used_count + reserved_count <= max_uses)
 );
 
 CREATE TABLE public.loyalty_transactions (
@@ -131,6 +137,7 @@ CREATE TABLE public.orders (
                                user_id uuid NOT NULL,
                                coupon_id uuid,
                                status public.order_status DEFAULT 'PENDING'::public.order_status NOT NULL,
+                               reservation_status varchar(16) NOT NULL DEFAULT 'NONE',
                                subtotal numeric(12,2) NOT NULL,
                                discount_amount numeric(12,2) DEFAULT 0 NOT NULL,
                                points_used integer DEFAULT 0 NOT NULL,
@@ -144,6 +151,7 @@ CREATE TABLE public.orders (
                                CONSTRAINT chk_orders_amounts CHECK (((subtotal >= (0)::numeric) AND (discount_amount >= (0)::numeric) AND (points_used >= 0) AND (points_discount_amount >= (0)::numeric) AND (total >= (0)::numeric) AND ((discount_amount + points_discount_amount) <= subtotal) AND (total = ((subtotal - discount_amount) - points_discount_amount)))),
     -- [B] Khong co coupon thi khong the co tien giam tu coupon.
                                CONSTRAINT chk_orders_coupon_discount CHECK (coupon_id IS NOT NULL OR discount_amount = 0),
+                               CONSTRAINT chk_orders_reservation_status CHECK (reservation_status IN ('NONE', 'HELD', 'CONSUMED', 'RELEASED')),
                                CONSTRAINT chk_orders_idempotency_pair CHECK (
                                    (idempotency_key IS NULL) = (request_hash IS NULL)
                                    )
@@ -236,8 +244,12 @@ CREATE TABLE public.user_vouchers (
                                       used_at timestamptz,
     -- Don hang ma voucher duoc su dung (NULL neu chua su dung).
                                       used_order_id uuid,
+                                       reserved_order_id uuid,
     -- [B] used_at va used_order_id phai cung NULL hoac cung co gia tri.
-                                      CONSTRAINT chk_uv_used CHECK ((used_at IS NULL) = (used_order_id IS NULL))
+                                      CONSTRAINT chk_uv_used CHECK ((used_at IS NULL) = (used_order_id IS NULL)),
+                                       CONSTRAINT chk_user_voucher_reservation CHECK (
+                                           reserved_order_id IS NULL OR (used_at IS NULL AND used_order_id IS NULL)
+                                       )
 );
 
 CREATE TABLE public.users (
@@ -248,12 +260,14 @@ CREATE TABLE public.users (
                               phone character varying(20),
                               role character varying(16) DEFAULT 'CUSTOMER'::character varying NOT NULL,
                               loyalty_points integer DEFAULT 0 NOT NULL,
+                               reserved_points integer DEFAULT 0 NOT NULL,
                               loyalty_debt integer DEFAULT 0 NOT NULL CHECK (loyalty_debt >= 0),
                               created_at timestamptz DEFAULT now() NOT NULL,
                               avatar_url character varying(500),
                               favorite_branch character varying(255),
                               CONSTRAINT chk_users_fullname CHECK ((length(btrim((full_name)::text)) >= 2)),
                               CONSTRAINT chk_users_loyalty CHECK ((loyalty_points >= 0)),
+                               CONSTRAINT chk_users_reserved_points CHECK (reserved_points >= 0 AND reserved_points <= loyalty_points),
                               CONSTRAINT chk_users_role CHECK (((role)::text = ANY (ARRAY[('CUSTOMER'::character varying)::text, ('STAFF'::character varying)::text, ('ADMIN'::character varying)::text])))
 );
 
@@ -427,6 +441,11 @@ CREATE TABLE public.ingredients (
                                     name varchar(255) NOT NULL,
                                     unit varchar(10) NOT NULL CHECK (unit IN ('g', 'ml', 'cai')),
                                     stock_quantity numeric(14,3) NOT NULL DEFAULT 0 CHECK (stock_quantity >= 0),
+                                     reserved_quantity numeric(14,3) NOT NULL DEFAULT 0,
+                                     CONSTRAINT chk_ingredients_reservations CHECK (
+                                         reserved_quantity >= 0 AND reserved_quantity <= stock_quantity
+                                     ),
+
                                     min_stock_quantity numeric(14,3) NOT NULL DEFAULT 0 CHECK (min_stock_quantity >= 0),
     -- Optimistic locking: backend tang version khi cap nhat ton kho.
                                     version integer NOT NULL DEFAULT 0 CHECK (version >= 0),
@@ -492,9 +511,19 @@ CREATE TABLE public.ingredient_movements (
 );
 
 
+-- Luong nguyen lieu da giu cho tung don (snapshot cong thuc tai thoi diem dat).
+CREATE TABLE public.order_ingredient_reservations (
+    order_id uuid NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
+    ingredient_id uuid NOT NULL REFERENCES public.ingredients(id) ON DELETE RESTRICT,
+    quantity numeric(14,3) NOT NULL CHECK (quantity > 0),
+    CONSTRAINT order_ingredient_reservations_pkey PRIMARY KEY (order_id, ingredient_id)
+);
+
 -- 5. CHI MUC QUAN LY NGUYEN VAT LIEU
 CREATE INDEX idx_recipe_ingredient ON public.product_ingredients(ingredient_id);
 CREATE INDEX idx_topping_recipe_ingredient ON public.topping_ingredients(ingredient_id);
+CREATE INDEX idx_order_ingredient_reservations_ingredient
+    ON public.order_ingredient_reservations(ingredient_id);
 CREATE INDEX idx_movements_ingredient_date ON public.ingredient_movements(ingredient_id, created_at);
 CREATE INDEX idx_movements_order ON public.ingredient_movements(order_id);
 CREATE INDEX idx_movements_performed_by ON public.ingredient_movements(performed_by);
