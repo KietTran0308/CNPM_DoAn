@@ -271,8 +271,16 @@ export class ZalopayService {
         // thanh toán thành công khi thiếu/không đọc được order_url.
         const rawOrderUrl = result.order_url;
         const orderUrl = typeof rawOrderUrl === 'string' ? rawOrderUrl.trim() : '';
+        const qrCode = typeof result.qr_code === 'string' ? result.qr_code.trim() : '';
         const decoded = this.decodeOrderUrl(orderUrl);
-        // Những thuộc tính sau không chứa link thanh toán, token hay khóa bí mật.
+
+        // EMVCo/VietQR thường có mẫu 000201...6304XXXX (CRC ở cuối).
+        // Chỉ phân loại lỗi, không đưa QR vào paymentUrl và không tự chế URL từ token.
+        const orderUrlEqualsQrCode = qrCode.length > 0 && orderUrl === qrCode;
+        const orderUrlLooksLikeEmvQr = /^000201/.test(orderUrl) &&
+            /6304[0-9A-F]{4}$/i.test(orderUrl) && /vn\.zalopay/i.test(orderUrl);
+
+        // Chỉ ghi metadata; tuyệt đối không ghi raw order_url, qr_code hoặc token lên Render.
         const diagnostics = {
             returnCode: result.return_code,
             subReturnCode: result.sub_return_code ?? null,
@@ -282,12 +290,21 @@ export class ZalopayService {
             ...this.safeOrderUrlDiagnostics(orderUrl),
             hasOrderToken: typeof result.order_token === 'string' && result.order_token.length > 0,
             hasZpTransToken: typeof result.zp_trans_token === 'string' && result.zp_trans_token.length > 0,
-            hasQrCode: typeof result.qr_code === 'string' && result.qr_code.length > 0,
+            hasQrCode: qrCode.length > 0,
+            orderUrlEqualsQrCode,
+            orderUrlLooksLikeEmvQr,
         };
         if (!orderUrl) {
             this.logger.warn(JSON.stringify({ event: 'ZALOPAY_CREATE_MISSING_ORDER_URL', ...diagnostics }));
             throw new ServiceUnavailableException(
                 'ZaloPay báo tạo đơn thành công nhưng thiếu đường dẫn thanh toán. Giao dịch cần đối soát; không tạo lại ngay.',
+            );
+        }
+        if (orderUrlEqualsQrCode || orderUrlLooksLikeEmvQr) {
+            this.logger.warn(JSON.stringify({ event: 'ZALOPAY_CREATE_ORDER_URL_IS_QR_PAYLOAD', ...diagnostics }));
+            throw new ServiceUnavailableException(
+                'ZaloPay trả nội dung mã QR thay vì URL HTTPS trong order_url. ' +
+                'Giao dịch đã được tạo và cần đối soát; không tạo lại ngay.',
             );
         }
         let url: URL;

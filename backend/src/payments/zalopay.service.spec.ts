@@ -195,4 +195,30 @@ describe('ZaloPay checkout URL validation', () => {
         gateway('SANDBOX_TEST_TOKEN');
         await expect(create()).rejects.toThrow('URL thanh toán sai định dạng');
     });
+
+    it('detects when order_url contains the QR payload instead of a payment URL', async () => {
+        // Giống mẫu EMVCo 000201...6304XXXX trong phản hồi ZaloPay.
+        const qr = '00020101021226520010vn.zalopay6304CE44';
+        global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({
+            return_code: 1, sub_return_code: 1, order_url: qr, qr_code: qr,
+            order_token: 'TOKEN_REDACTED', zp_trans_token: 'TOKEN_REDACTED',
+        }) })) as any;
+        await expect(create()).rejects.toThrow('mã QR thay vì URL HTTPS');
+    });
+
+    it('detects a QR-shaped order_url even if qr_code is different', async () => {
+        const qr = '00020101021226520010vn.zalopay6304CE44';
+        global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({
+            return_code: 1, sub_return_code: 1, order_url: qr, qr_code: 'DIFFERENT_QR',
+        }) })) as any;
+        await expect(create()).rejects.toThrow('mã QR thay vì URL HTTPS');
+    });
+
+    it('still accepts official order_url when a separate qr_code exists', async () => {
+        global.fetch = jest.fn(async () => ({ ok: true, json: async () => ({
+            return_code: 1, sub_return_code: 1, order_url: valid,
+            qr_code: '00020101021226520010vn.zalopay6304CE44',
+        }) })) as any;
+        expect(await create()).toBe(valid);
+    });
 });
