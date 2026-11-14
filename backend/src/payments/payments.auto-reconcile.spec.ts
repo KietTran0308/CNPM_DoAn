@@ -1,4 +1,4 @@
-import { OrderStatus, PaymentMethod, PaymentStatus } from '@prisma/client';
+import { OrderStatus, PaymentStatus } from '@prisma/client';
 import { PaymentsService } from './payments.service';
 
 describe('ZaloPay auto reconciliation without callback', () => {
@@ -14,7 +14,7 @@ describe('ZaloPay auto reconciliation without callback', () => {
         await (service as any).reconcilePendingZalopay();
         expect(recheck).toHaveBeenCalledWith('ADMIN', 'order-1');
         expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
-            where: expect.objectContaining({ method: PaymentMethod.ZALOPAY,
+            where: expect.objectContaining({ methodCode: 'ZALOPAY',
                 status: PaymentStatus.PENDING, createdAt: { lte: expect.any(Date) } }),
         }));
     });

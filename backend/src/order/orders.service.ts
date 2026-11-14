@@ -304,7 +304,7 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                     lte: new Date(),
                 },
                 // Đơn còn phiên ZaloPay hoặc giao dịch cũ PENDING phải đối soát trước khi cho phép hủy.
-                payments: { none: { method: { in: ['ZALOPAY', 'VNPAY'] }, status: { in: ['PENDING', 'SUCCESS'] } } },
+                payments: { none: { paymentMethod: { type: 'GATEWAY' }, status: { in: ['PENDING', 'SUCCESS'] } } },
             },
             select: {
                 id: true,
@@ -788,18 +788,30 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                     // Giao dịch chưa rõ kết quả PHẢI đối soát trước. Không hủy để tránh
                     // tạo điều kiện cho khách thanh toán trong khi đơn đã bị giải phóng tài nguyên.
                     const pendingGateway = await tx.payment.findFirst({
-                        where: { orderId, method: { in: ['ZALOPAY', 'VNPAY'] }, status: 'PENDING' },
+                        where: { orderId, paymentMethod: { type: 'GATEWAY' }, status: 'PENDING' },
                     });
                     if (pendingGateway) {
                         throw new ConflictException('Thanh toán đang chờ xác minh với cổng; vui lòng kiểm tra kết quả trước khi hủy');
                     }
                     const confirmedGateway = await tx.payment.findFirst({
-                        where: { orderId, method: { in: ['ZALOPAY', 'VNPAY'] }, status: 'SUCCESS' },
+                        where: { orderId, paymentMethod: { type: 'GATEWAY' }, status: 'SUCCESS' },
                     });
                     // Nếu đã có tiền tại cổng nhưng đơn chưa PAID, bắt buộc hoàn tất/đối soát
                     // trước. Chỉ đơn PAID (chưa pha chế) mới được HỦY và HOÀN MÔ PHỎNG.
                     if (confirmedGateway && order.status !== OrderStatus.PAID) {
                         throw new ConflictException('Cổng đã ghi nhận tiền nhưng đơn chưa hoàn tất. Cần đối soát trước khi hủy');
+                    }
+                    // BrewLite đang tích hợp riêng ZaloPay SANDBOX: cho phép hủy đơn PAID
+                    // trước khi pha chế và ghi nhận hoàn MÔ PHỎNG ở sổ cái nội bộ.
+                    // Không gọi Refund API, KHÔNG khẳng định tiền đã về lại ví ZaloPay.
+                    // Phương thức cổng khác / ZaloPay production không được phép áp dụng.
+                    if (confirmedGateway && order.status === OrderStatus.PAID) {
+                        const sandboxCreateUrl = process.env.ZALOPAY_CREATE_URL ||
+                            'https://sb-openapi.zalopay.vn/v2/create';
+                        if (confirmedGateway.methodCode !== 'ZALOPAY' ||
+                            sandboxCreateUrl !== 'https://sb-openapi.zalopay.vn/v2/create') {
+                            throw new ConflictException('Chỉ hỗ trợ hủy mô phỏng đối với ZaloPay Sandbox');
+                        }
                     }
                     assertTransition(order.status, OrderStatus.CANCELLED);
                     let simulatedRefundAmount = 0;
@@ -856,8 +868,8 @@ export class OrdersService implements OnModuleInit, OnModuleDestroy {
                             if (payment.refundedAmount.greaterThan(0)) {
                                 throw new ConflictException('Giao dịch này đã được ghi nhận hoàn mô phỏng trước đó');
                             }
-                            // Chỉ cập nhật SỔ CÁI DEMO trong BrewLite. KHÔNG gọi ZaloPay Refund API,
-                            // không khẳng định đã chuyển tiền thật về ví của khách.
+                            // Chỉ ghi nhận hoàn MÔ PHỎNG tại BrewLite (bao gồm ZaloPay Sandbox).
+                            // refundedAmount ở đây là số liệu DEMO, KHÔNG phải hoàn tiền thật về ví.
                             simulatedRefundAmount = Number(payment.amount);
                             await tx.payment.update({
                                 where: { id: payment.id },

@@ -37,7 +37,7 @@ describe("PaymentsService - idempotency", () => {
     const savedPayment = {
       id: "payment-1",
       orderId: ORDER_ID,
-      method: "WALLET",
+      methodCode: "WALLET",
       status: "SUCCESS",
       order: {
         id: ORDER_ID,
@@ -73,7 +73,7 @@ describe("PaymentsService - idempotency", () => {
     const savedPayment = {
       id: "payment-1",
       orderId: ORDER_ID,
-      method: "CARD",
+      methodCode: "CARD",
       status: "SUCCESS",
       order: {
         id: ORDER_ID,
@@ -103,7 +103,7 @@ describe("PaymentsService - idempotency", () => {
     const savedPayment = {
       id: "payment-1",
       orderId: ORDER_ID,
-      method: "WALLET",
+      methodCode: "WALLET",
       status: "SUCCESS",
       order: {
         id: ORDER_ID,
@@ -133,7 +133,7 @@ describe("PaymentsService - idempotency", () => {
     const savedPayment = {
       id: "payment-2",
       orderId: ORDER_ID,
-      method: "WALLET",
+      methodCode: "WALLET",
       status: "FAILED",
       order: {
         id: ORDER_ID,

@@ -28,6 +28,12 @@ integration('Hai don thanh toan dong thoi - ton kho', () => {
 
         prisma = new PrismaClient({ datasources: { db: { url: testDatabaseUrl! } } });
         await prisma.$connect();
+        // Test DB only: activate WALLET on isolated brewlite_test.
+        await prisma.paymentMethod.upsert({
+            where: { code: 'WALLET' },
+            create: { code: 'WALLET', name: 'Ví nội bộ (test)', type: 'INTERNAL', isActive: true },
+            update: { isActive: true },
+        });
         const suffix = randomUUID().replace(/-/g, '').slice(0, 16);
         for (let i = 0; i < 2; i++) {
             const user = await prisma.user.create({

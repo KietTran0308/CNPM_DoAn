@@ -394,6 +394,15 @@ function UngDungDatNuoc() {
                     setManHinhHienTai('success');
                     return;
                 }
+                if (result.orderStatus === 'CANCELLED' && result.simulatedCancellation) {
+                    setCurrentPendingOrderId(null);
+                    setZalopayCheckout(null);
+                    setZalopayNeedsReconciliation(false);
+                    setZalopayMessage(null);
+                    setManHinhHienTai('history');
+                    void api.getMyOrders().then(setOrderHistory).catch(() => {});
+                    return;
+                }
                 if (result.requiresReconciliation || result.payment?.status === 'SUCCESS') {
                     setZalopayNeedsReconciliation(true);
                     setZalopayMessage('Cổng thanh toán đã ghi nhận kết quả nhưng đơn chưa hoàn tất. Liên hệ ADMIN đối soát, không thanh toán lại.');
@@ -550,7 +559,16 @@ function UngDungDatNuoc() {
                     await new Promise<void>(resolve => window.setTimeout(resolve, 3500));
                 }
             }
-            if (data) setProducts(data);
+            if (data) {
+                setProducts(data);
+                // Remove retired catalog items from an old persisted cart ONLY when API succeeds.
+                // The Backend also checks isActive at order creation.
+                const availableIds = new Set(data.filter(p => p.isActive !== false).map(p => p.id));
+                const cart = useGioHang.getState();
+                for (const line of cart.cartLines) {
+                    if (!availableIds.has(line.item.productId)) cart.removeCartItem(line.item.id);
+                }
+            }
             // Toppings không tải được không được che lỗi menu hoặc làm mất menu đã tải.
             try { setAvailableToppings(await api.getToppings()); }
             catch (error) { console.error('Không tải được topping:', error); }
@@ -1276,13 +1294,7 @@ function UngDungDatNuoc() {
             setStatusNotice({ type: 'error', orderId, message: error?.message || 'Trạng thái này không cho phép hủy.' });
             return;
         }
-        const isPaid = order.status === 'PAID';
-        const warning = isPaid
-            ? order.total > 0
-                ? `Hủy đơn #${order.orderCode ?? order.id}? Hệ thống chỉ ghi nhận hoàn ${formatPrice(order.total)} MÔ PHỎNG trong BrewLite. ZaloPay Sandbox KHÔNG chuyển tiền thật về ví.`
-                : `Hủy đơn #${order.orderCode ?? order.id}? Đơn 0đ không phát sinh hoàn tiền.`
-            : `Bạn muốn hủy đơn #${order.orderCode ?? order.id}?`;
-        if (!window.confirm(warning)) return;
+        // Nút trên giao diện đã xác nhận bằng hai lần bấm; không dùng hộp thoại trình duyệt.
         setCancellingOrderId(orderId);
         setStatusNotice(null);
         try {
@@ -1321,7 +1333,7 @@ function UngDungDatNuoc() {
             void taiDanhSachMon().catch(() => {});
             const refund = result.refund;
             const message = refund?.mode === 'SIMULATED' && refund.amount > 0
-                ? `Đơn #${order.orderCode ?? orderId} đã hủy. Hoàn ${formatPrice(refund.amount)} MÔ PHỎNG trong BrewLite; ZaloPay không hoàn tiền thật.`
+                ? `Đơn #${order.orderCode ?? orderId} đã hủy.`
                 : `Đơn #${order.orderCode ?? orderId} đã hủy thành công (không phát sinh hoàn tiền).`;
             setStatusNotice({ type: 'success', orderId, message });
         } catch (error: any) {

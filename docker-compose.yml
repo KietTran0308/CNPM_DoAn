@@ -6,19 +6,26 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Can_thiet_lap_POSTGRES_PASSWORD_trong_.env}
-      POSTGRES_DB: ${POSTGRES_DB:-brewlite_local}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set_POSTGRES_PASSWORD_in_.env}
+      POSTGRES_DB: ${POSTGRES_DB:-brewlite}
     ports:
       - "127.0.0.1:5433:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./backend/prisma/dbBrewLite.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      # This NEW volume does not reuse the older project PostgreSQL volume.
+      - postgres_data_fresh_20261114:/var/lib/postgresql/data
+      # PostgreSQL's official entrypoint runs this SQL ONCE on an EMPTY data directory.
+      - ./backend/prisma/dbBrewLite.sql:/docker-entrypoint-initdb.d/01-brewlite.sql:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: >-
+        PGPASSWORD="$$POSTGRES_PASSWORD" psql -h 127.0.0.1
+        -U "$$POSTGRES_USER" -d "$$POSTGRES_DB" -tAc
+        "SELECT CASE WHEN EXISTS (SELECT 1 FROM public.payment_methods WHERE code = 'ZALOPAY')
+        AND EXISTS (SELECT 1 FROM public.products WHERE code = 'BL015')
+        THEN 'ready' ELSE 'pending' END" | grep -qx ready
       interval: 5s
-      timeout: 3s
-      retries: 30
-      start_period: 10s
+      timeout: 5s
+      retries: 40
+      start_period: 45s
 
   backend:
     build:
@@ -27,8 +34,8 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
-      DATABASE_URL: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-brewlite_local}?schema=public"
-      JWT_SECRET: ${JWT_SECRET:?Can_thiet_lap_JWT_SECRET_trong_.env}
+      DATABASE_URL: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-brewlite}?schema=public"
+      JWT_SECRET: ${JWT_SECRET:?Set_JWT_SECRET_in_.env}
       FRONTEND_URL: ${LOCAL_FRONTEND_URL:-http://localhost:3100,http://127.0.0.1:3100}
       PORT: "4000"
       ENABLE_DEMO_PAYMENTS: ${ENABLE_DEMO_PAYMENTS:-false}
@@ -37,13 +44,10 @@ services:
       ZALOPAY_KEY2: ${ZALOPAY_KEY2:-}
       ZALOPAY_CREATE_URL: ${ZALOPAY_CREATE_URL:-https://sb-openapi.zalopay.vn/v2/create}
       ZALOPAY_QUERY_URL: ${ZALOPAY_QUERY_URL:-https://sb-openapi.zalopay.vn/v2/query}
-      # Không khai báo: local vẫn tạo QR; QueryDR tự xác minh khi callback không đến.
-      # Có HTTPS tunnel riêng thì đặt ZALOPAY_LOCAL_CALLBACK_URL trong .env.
+      # Local database MUST NOT send a payment callback to the Render backend.
       ZALOPAY_CALLBACK_URL: ${ZALOPAY_LOCAL_CALLBACK_URL:-}
       ZALOPAY_AUTO_RECONCILE: ${ZALOPAY_AUTO_RECONCILE:-true}
-      # Local DB riêng: chặn cấu hình callback nhầm sang Backend Render.
-      ZALOPAY_LOCAL_MODE: 'true'
-      # Tùy chọn: Frontend HTTPS tunnel cho thiết bị di động quay lại sau thanh toán.
+      ZALOPAY_LOCAL_MODE: "true"
       ZALOPAY_RETURN_ORIGIN: ${ZALOPAY_RETURN_ORIGIN:-}
     ports:
       - "127.0.0.1:4100:4000"
@@ -55,7 +59,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 15
-      start_period: 15s
+      start_period: 20s
 
   frontend:
     build:
@@ -72,4 +76,5 @@ services:
         condition: service_healthy
 
 volumes:
-  postgres_data:
+  postgres_data_fresh_20261114:
+    name: brewlite_local_pg16_fresh_20261114

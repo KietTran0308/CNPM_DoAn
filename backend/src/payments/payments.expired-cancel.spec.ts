@@ -2,9 +2,9 @@ import { PaymentsService } from './payments.service';
 
 describe('QueryDR và đơn quá hạn', () => {
   const base = {
-    id: 'p1', orderId: 'o1', providerRef: '251113_o1',
-    status: 'PENDING', amount: 84000, zpOrderUrl: 'https://zalopay.vn/pay',
-    zpQrCode: null, createdAt: new Date(Date.now() - 30_000),
+    id: 'p1', orderId: 'o1', methodCode: 'ZALOPAY',
+    gatewayTransaction: { providerRef: '251113_o1', checkoutUrl: 'https://zalopay.vn/pay', qrContent: null },
+    status: 'PENDING', amount: 84000, createdAt: new Date(Date.now() - 30_000),
     order: { id: 'o1', userId: 'u1', status: 'PENDING',
       expiresAt: new Date(Date.now() - 5 * 60_000) },
   };

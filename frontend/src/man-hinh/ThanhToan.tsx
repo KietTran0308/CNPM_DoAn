@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, CreditCard, Wallet } from 'lucide-react';
 import { User, Order, Product, OrderStatus, formatPrice, CartLine } from '../api';
 import { MaQrZalopay } from './MaQrZalopay';
 
@@ -140,8 +140,8 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
         try {
             const url = new URL(zalopayCheckout.paymentUrl);
             return url.protocol === 'https:' &&
-                (url.hostname === 'zalopay.vn' || url.hostname.endsWith('.zalopay.vn')) &&
-                !url.username && !url.password && (!url.port || url.port === '443')
+            (url.hostname === 'zalopay.vn' || url.hostname.endsWith('.zalopay.vn')) &&
+            !url.username && !url.password && (!url.port || url.port === '443')
                 ? url.toString() : null;
         } catch {
             return null;
@@ -203,181 +203,115 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                         </div>
                     )}
 
-                    <div className="bg-[#FBF9F5] border border-[#E2D9C0] rounded-xl p-5 space-y-3.5">
-                        <div className="text-sm font-semibold text-[#124E35] pb-2 border-b border-[#E2D9C0]">
-                            Chọn phương thức thanh toán
+                    {/* Mỗi lựa chọn là một radio thực: click toàn bộ thẻ hoặc dùng bàn phím để chọn. */}
+                    <div className="bg-[#FBF9F5] border border-[#E2D9C0] rounded-xl p-5 space-y-4">
+                        <div className="pb-3 border-b border-[#E2D9C0]">
+                            <h2 className="text-sm sm:text-base font-semibold text-[#124E35]">
+                                Chọn phương thức thanh toán
+                            </h2>
+                            <p className="mt-1 text-xs text-neutral-600">
+                                Chọn một phương thức phù hợp để hoàn tất đơn hàng.
+                            </p>
                         </div>
 
-                        <div
-                            className={`p-4 border rounded-xl cursor-pointer transition-colors bg-white ${
-                                paymentMethod === 'wallet'
-                                    ? 'border-[#124E35]'
-                                    : 'border-[#E2D9C0] hover:border-[#124E35]/50'
-                            }`}
-                            onClick={() => { if (!locked) setPaymentMethod('wallet'); }}
-                        >
-                            <div className="flex items-center justify-between text-xs sm:text-sm font-semibold text-[#124E35]">
-                                <span>{DEMO_PAYMENTS ? 'Ví điện tử (MoMo mô phỏng / ZaloPay Sandbox)' : 'Thanh toán trực tuyến qua ZaloPay Sandbox'}</span>
-                                <span
-                                    className={`text-xs px-2.5 py-0.5 rounded border font-semibold ${
-                                        paymentMethod === 'wallet'
-                                            ? 'bg-[#124E35] border-[#124E35] text-[#F5F0E1]'
-                                            : 'bg-[#EDE6D1] border-[#D5CCB4] text-[#124E35]'
-                                    }`}
-                                >
-                  {paymentMethod === 'wallet' ? 'Đang chọn' : 'Chọn'}
-                </span>
-                            </div>
+                        <fieldset disabled={locked} className="space-y-3">
+                            <legend className="sr-only">Phương thức thanh toán</legend>
 
-                            {paymentMethod === 'wallet' && (
-                                <div className="pt-3.5 mt-3.5 border-t border-[#E2D9C0] space-y-3.5">
-                                    <div className="grid grid-cols-2 gap-2.5">
-                                        {(DEMO_PAYMENTS ? ['MoMo', 'ZaloPay'] as const : ['ZaloPay'] as const).map((type) => (
-                                            <button
-                                                key={type}
-                                                type="button"
-                                                disabled={locked}
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    if (!locked) setWalletType(type);
-                                                }}
-                                                className={`py-2.5 text-xs sm:text-sm border rounded-lg cursor-pointer text-center transition-colors ${
-                                                    walletType === type
-                                                        ? 'bg-[#124E35] text-[#F5F0E1] font-semibold border-[#124E35]'
-                                                        : 'bg-[#EDE6D1] text-[#124E35] font-medium border-[#D5CCB4] hover:bg-[#124E35] hover:text-[#F5F0E1]'
-                                                }`}
-                                            >
-                                                Ví {type}
-                                            </button>
-                                        ))}
-                                    </div>
+                            <label
+                                className={`flex items-center gap-3 sm:gap-4 rounded-xl border px-4 py-3.5 transition-colors ${
+                                    paymentMethod === 'wallet' && walletType === 'ZaloPay'
+                                        ? 'border-[#124E35] bg-[#EDE6D1]/45 ring-1 ring-[#124E35]/20'
+                                        : 'border-[#E2D9C0] bg-white hover:border-[#124E35]/60'
+                                } ${locked ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+                            >
+                                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#EDE6D1] text-[#124E35]">
+                                    <Wallet className="h-5 w-5" aria-hidden="true" />
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                    <span className="block text-sm font-semibold text-[#124E35]">Ví ZaloPay</span>
+                                    <span className="mt-0.5 block text-xs leading-relaxed text-neutral-600">
+                                        Thanh toán bằng mã QR ZaloPay Sandbox
+                                    </span>
+                                </span>
+                                <input
+                                    type="radio"
+                                    name="brewlite-payment-method"
+                                    value="zalopay"
+                                    checked={paymentMethod === 'wallet' && walletType === 'ZaloPay'}
+                                    onChange={() => {
+                                        setPaymentMethod('wallet');
+                                        setWalletType('ZaloPay');
+                                    }}
+                                    className="h-5 w-5 shrink-0 accent-[#124E35] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#124E35]"
+                                />
+                            </label>
 
-                                    {walletType === 'ZaloPay' ? (
-                                        <div className="rounded-lg border border-[#D5CCB4] bg-[#FBF9F5] p-4 text-xs text-neutral-700">
-                                            BrewLite sẽ hiển thị mã QR ZaloPay Sandbox để bạn quét; nếu không có QR sẽ mở cổng thanh toán HTTPS.
-                                            Không sử dụng mã QR minh họa làm mã thanh toán thật.
-                                        </div>
-                                    ) : <div className="pt-1 text-center space-y-2">
-                                        <div className="w-36 h-36 mx-auto border border-[#D5CCB4] rounded-xl p-3 bg-[#FBF9F5] flex items-center justify-center">
-                                            <svg
-                                                viewBox="0 0 100 100"
-                                                className="w-full h-full text-[#124E35]"
-                                                fill="currentColor"
-                                            >
-                                                <rect
-                                                    x="6"
-                                                    y="6"
-                                                    width="26"
-                                                    height="26"
-                                                    fill="none"
-                                                    stroke="currentColor"
-                                                    strokeWidth="4"
-                                                />
-                                                <rect x="13" y="13" width="12" height="12" />
-                                                <rect
-                                                    x="68"
-                                                    y="6"
-                                                    width="26"
-                                                    height="26"
-                                                    fill="none"
-                                                    stroke="currentColor"
-                                                    strokeWidth="4"
-                                                />
-                                                <rect x="75" y="13" width="12" height="12" />
-                                                <rect
-                                                    x="6"
-                                                    y="68"
-                                                    width="26"
-                                                    height="26"
-                                                    fill="none"
-                                                    stroke="currentColor"
-                                                    strokeWidth="4"
-                                                />
-                                                <rect x="13" y="75" width="12" height="12" />
-                                                <rect x="38" y="8" width="5" height="5" />
-                                                <rect x="48" y="8" width="5" height="5" />
-                                                <rect x="58" y="8" width="5" height="5" />
-                                                <rect x="38" y="18" width="5" height="5" />
-                                                <rect x="53" y="18" width="5" height="5" />
-                                                <rect x="43" y="28" width="5" height="5" />
-                                                <rect x="58" y="28" width="5" height="5" />
-                                                <rect x="8" y="38" width="5" height="5" />
-                                                <rect x="18" y="38" width="5" height="5" />
-                                                <rect x="28" y="38" width="5" height="5" />
-                                                <rect x="38" y="38" width="10" height="10" />
-                                                <rect x="58" y="38" width="5" height="5" />
-                                                <rect x="68" y="38" width="10" height="5" />
-                                                <rect x="88" y="38" width="5" height="5" />
-                                                <rect x="8" y="48" width="5" height="5" />
-                                                <rect x="23" y="48" width="5" height="5" />
-                                                <rect x="33" y="48" width="5" height="5" />
-                                                <rect x="53" y="48" width="10" height="10" />
-                                                <rect x="73" y="48" width="5" height="5" />
-                                                <rect x="88" y="48" width="5" height="5" />
-                                                <rect x="8" y="58" width="5" height="5" />
-                                                <rect x="28" y="58" width="5" height="5" />
-                                                <rect x="38" y="58" width="5" height="5" />
-                                                <rect x="68" y="58" width="5" height="5" />
-                                                <rect x="78" y="58" width="5" height="5" />
-                                                <rect x="88" y="58" width="5" height="5" />
-                                                <rect x="38" y="68" width="10" height="5" />
-                                                <rect x="53" y="68" width="5" height="5" />
-                                                <rect x="63" y="68" width="5" height="5" />
-                                                <rect x="78" y="68" width="10" height="5" />
-                                                <rect x="43" y="78" width="5" height="5" />
-                                                <rect x="58" y="78" width="10" height="5" />
-                                                <rect x="73" y="78" width="5" height="5" />
-                                                <rect x="88" y="78" width="5" height="5" />
-                                                <rect x="38" y="88" width="5" height="5" />
-                                                <rect x="48" y="88" width="10" height="5" />
-                                                <rect x="68" y="88" width="5" height="5" />
-                                                <rect x="83" y="88" width="10" height="5" />
-                                            </svg>
-                                        </div>
+                            <label
+                                className={`flex items-center gap-3 sm:gap-4 rounded-xl border px-4 py-3.5 transition-colors ${
+                                    !DEMO_PAYMENTS
+                                        ? 'border-[#E2D9C0] bg-[#F3F0EA] opacity-65 cursor-not-allowed'
+                                        : paymentMethod === 'wallet' && walletType === 'MoMo'
+                                            ? 'border-[#124E35] bg-[#EDE6D1]/45 ring-1 ring-[#124E35]/20'
+                                            : 'border-[#E2D9C0] bg-white hover:border-[#124E35]/60'
+                                } ${locked ? 'cursor-not-allowed' : DEMO_PAYMENTS ? 'cursor-pointer' : ''}`}
+                            >
+                                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#EDE6D1] text-[#124E35]">
+                                    <Wallet className="h-5 w-5" aria-hidden="true" />
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                    <span className="block text-sm font-semibold text-[#124E35]">Ví MoMo</span>
+                                    <span className="mt-0.5 block text-xs leading-relaxed text-neutral-600">
+                                        {DEMO_PAYMENTS ? 'Thanh toán mô phỏng, không chuyển tiền thật' : 'Chưa hỗ trợ thanh toán'}
+                                    </span>
+                                </span>
+                                <input
+                                    type="radio"
+                                    name="brewlite-payment-method"
+                                    value="momo"
+                                    checked={paymentMethod === 'wallet' && walletType === 'MoMo'}
+                                    disabled={!DEMO_PAYMENTS || locked}
+                                    onChange={() => {
+                                        setPaymentMethod('wallet');
+                                        setWalletType('MoMo');
+                                    }}
+                                    className="h-5 w-5 shrink-0 accent-[#124E35] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#124E35]"
+                                />
+                            </label>
 
-                                        <p className="text-xs text-neutral-600">
-                                            Mã minh họa (không quét bằng ví thật) bằng ứng dụng <strong className="text-[#124E35]">{walletType}</strong>
-                                        </p>
-                                        <p className="text-[11px] font-mono text-neutral-500">
-                                            Nội dung: BREW-{finalPayable}
-                                        </p>
-                                    </div>}
-                                </div>
-                            )}
-                        </div>
-
-                        {DEMO_PAYMENTS && <div
-                            className={`p-4 border rounded-xl cursor-pointer transition-colors bg-white ${
-                                paymentMethod === 'bank'
-                                    ? 'border-[#124E35]'
-                                    : 'border-[#E2D9C0] hover:border-[#124E35]/50'
-                            }`}
-                            onClick={() => { if (!locked) setPaymentMethod('bank'); }}
-                        >
-                            <div className="flex items-center justify-between text-xs sm:text-sm font-semibold text-[#124E35]">
-                                <span>Thẻ ngân hàng (Visa, Master, Napas)</span>
-                                <span
-                                    className={`text-xs px-2.5 py-0.5 rounded border font-semibold ${
-                                        paymentMethod === 'bank'
-                                            ? 'bg-[#124E35] border-[#124E35] text-[#F5F0E1]'
-                                            : 'bg-[#EDE6D1] border-[#D5CCB4] text-[#124E35]'
-                                    }`}
-                                >
-                  {paymentMethod === 'bank' ? 'Đang chọn' : 'Chọn'}
-                </span>
-                            </div>
-
-                            {paymentMethod === 'bank' && (
-                                <p className="mt-3 text-xs text-amber-700" role="note">
-                                    Đây chỉ là thanh toán thẻ MÔ PHỎNG. Không nhập số thẻ, ngày hết hạn hoặc CVV thật.
-                                </p>
-                            )}
-                        </div>}
+                            <label
+                                className={`flex items-center gap-3 sm:gap-4 rounded-xl border px-4 py-3.5 transition-colors ${
+                                    !DEMO_PAYMENTS
+                                        ? 'border-[#E2D9C0] bg-[#F3F0EA] opacity-65 cursor-not-allowed'
+                                        : paymentMethod === 'bank'
+                                            ? 'border-[#124E35] bg-[#EDE6D1]/45 ring-1 ring-[#124E35]/20'
+                                            : 'border-[#E2D9C0] bg-white hover:border-[#124E35]/60'
+                                } ${locked ? 'cursor-not-allowed' : DEMO_PAYMENTS ? 'cursor-pointer' : ''}`}
+                            >
+                                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-[#EDE6D1] text-[#124E35]">
+                                    <CreditCard className="h-5 w-5" aria-hidden="true" />
+                                </span>
+                                <span className="min-w-0 flex-1">
+                                    <span className="block text-sm font-semibold text-[#124E35]">Thẻ ngân hàng</span>
+                                    <span className="mt-0.5 block text-xs leading-relaxed text-neutral-600">
+                                        {DEMO_PAYMENTS ? 'Visa / Mastercard / Napas — mô phỏng, không dùng thẻ thật' : 'Chưa hỗ trợ thanh toán'}
+                                    </span>
+                                </span>
+                                <input
+                                    type="radio"
+                                    name="brewlite-payment-method"
+                                    value="bank"
+                                    checked={paymentMethod === 'bank'}
+                                    disabled={!DEMO_PAYMENTS || locked}
+                                    onChange={() => setPaymentMethod('bank')}
+                                    className="h-5 w-5 shrink-0 accent-[#124E35] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#124E35]"
+                                />
+                            </label>
+                        </fieldset>
                     </div>
+
                     {zalopayCheckout && (showZalopayQr || zalopayNeedsReconciliation || secondsLeft === 0) && (
                         <section aria-live="polite" className="rounded-xl border border-[#D5CCB4] bg-white p-4 space-y-3 text-center">
                             <h3 className="text-base font-semibold text-[#124E35]">Quét mã QR ZaloPay của đơn hàng</h3>
-                            <p className="text-xs text-neutral-700">{zalopayMessage || 'Đang chờ ZaloPay xác nhận thanh toán...'}</p>
                             {showZalopayQr && !zalopayNeedsReconciliation && (secondsLeft === null || secondsLeft > 0) && qrValue && (
                                 <>
                                     <MaQrZalopay
@@ -396,25 +330,20 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                             )}
                             {showZalopayQr && !zalopayNeedsReconciliation && (secondsLeft === null || secondsLeft > 0) && paymentUrl && (
                                 <a href={paymentUrl} target="_blank" rel="noopener noreferrer"
-                                    className="inline-block rounded-lg border border-[#124E35] px-4 py-2 text-xs font-semibold text-[#124E35]">
+                                   className="inline-block rounded-lg border border-[#124E35] px-4 py-2 text-xs font-semibold text-[#124E35]">
                                     Mở ZaloPay bằng liên kết
                                 </a>
                             )}
                             {secondsLeft === 0 && !zalopayNeedsReconciliation && (
                                 <p className="text-xs font-semibold text-amber-800">QR đã hết thời gian hiệu lực. Không quét tiếp; chờ Backend kiểm tra và đối soát.</p>
                             )}
-                            <p className="text-[11px] text-neutral-600 leading-relaxed">
-                                QR gắn với giao dịch ZaloPay Sandbox đã được Backend tạo, không phải QR minh họa.
-                                Hệ thống kiểm tra kết quả tự động; chỉ xác nhận thành công khi Backend ghi nhận thanh toán.
-                                Không quét hay thanh toán thêm nếu đã trả tiền.
-                            </p>
                             {zalopayNeedsReconciliation && (
                                 <p className="text-xs font-semibold text-amber-800">Giao dịch cần đối soát. Không tạo thanh toán mới cho cùng đơn.</p>
                             )}
                             {onVerifyZalopay && (
                                 <button type="button" onClick={onVerifyZalopay}
-                                    disabled={zalopayVerifying}
-                                    className="w-full rounded-lg bg-[#124E35] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">
+                                        disabled={zalopayVerifying}
+                                        className="w-full rounded-lg bg-[#124E35] px-4 py-3 text-sm font-semibold text-white disabled:opacity-50">
                                     {zalopayVerifying ? 'Đang kiểm tra giao dịch...' : 'Tôi đã thanh toán – Kiểm tra kết quả'}
                                 </button>
                             )}
@@ -430,7 +359,6 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
 
                     {zalopayCheckout && <p className="text-xs text-[#124E35]">
                         Mã đơn: <strong>{zalopayCheckout.orderCode || zalopayCheckout.orderId}</strong>
-                        <span className="block mt-1 text-neutral-600">Số tiền dưới đây lấy từ đơn hàng đã lưu trên Backend.</span>
                     </p>}
                     {listedItems?.length ? (
                         <div className="space-y-2.5 pb-3 border-b border-[#E2D9C0]">
@@ -505,13 +433,7 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                             <span className="font-mono tabular-nums font-semibold">{locked ? `${paidPoints} điểm đã dùng` : `${userPoints} điểm khả dụng`}</span>
                         </div>
 
-                        {locked ? (
-                            <div className="text-xs text-[#124E35]/80 leading-relaxed">
-                                {paidPoints > 0
-                                    ? `Đơn này đã khóa ${paidPoints} điểm, giảm ${formatPrice(paidPointsDiscount)}. Không thể thay đổi sau khi đã tạo giao dịch.`
-                                    : 'Đơn này không sử dụng điểm thưởng. Chỉ được chọn điểm trước khi xác nhận thanh toán.'}
-                            </div>
-                        ) : userPoints > 0 ? (
+                        {!locked && (userPoints > 0 ? (
                             <div className="space-y-2.5">
                                 <label className="flex items-center gap-2 text-xs text-[#124E35] cursor-pointer select-none">
                                     <input
@@ -570,7 +492,7 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                             <div className="text-xs text-[#124E35]/70 italic">
                                 Bạn chưa có điểm thưởng khả dụng (Mỗi 10.000đ thanh toán nhận +1 điểm).
                             </div>
-                        )}
+                        ))}
                     </div>
 
                     <div className="space-y-2">
@@ -643,8 +565,6 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                         <span>Mô phỏng lỗi giao dịch</span>
                     </label>}
                     {!zalopayCheckout && DEMO_PAYMENTS && <p className="text-xs text-amber-700">Ví MoMo và thẻ ngân hàng chỉ mô phỏng, không ghi nhận tiền thật.</p>}
-                    {!zalopayCheckout && finalPayable > 0 && paymentMethod === 'wallet' && walletType === 'ZaloPay' &&
-                        <p className="text-xs text-neutral-600">Sau khi tạo giao dịch, quét mã QR ZaloPay (hoặc mở cổng HTTPS). Đơn chỉ thành công khi Backend xác nhận thanh toán.</p>}
 
                     <button
                         type="button"
@@ -657,8 +577,8 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
                         {checkoutLoading
                             ? 'Đang xử lý giao dịch...'
                             : zalopayCheckout ? (showZalopayQr ? 'Đang chờ xác nhận từ ZaloPay' :
-                                (zalopayNeedsReconciliation || secondsLeft === 0 ? 'Giao dịch hết hạn / đang đối soát' : 'Hiển thị mã QR thanh toán'))
-                            : finalPayable === 0 ? 'Xác nhận đơn 0đ (không qua cổng thanh toán)' : `Xác nhận thanh toán · ${formatPrice(finalPayable)}`}
+                                    (zalopayNeedsReconciliation || secondsLeft === 0 ? 'Giao dịch hết hạn / đang đối soát' : 'Hiển thị mã QR thanh toán'))
+                                : finalPayable === 0 ? 'Xác nhận đơn 0đ (không qua cổng thanh toán)' : `Xác nhận thanh toán · ${formatPrice(finalPayable)}`}
                     </button>
                 </div>
             </div>
@@ -667,4 +587,3 @@ export const ThanhToan: React.FC<ThanhToanProps> = ({
 };
 
 export default ThanhToan;
-

@@ -23,6 +23,8 @@ export const DatHangThanhCong: React.FC<DatHangThanhCongProps> = ({
                                                                       statusNotice,
                                                                       onClearNotice,
                                                                   }) => {
+    // Mỗi đơn cần hai lần bấm; không bật alert/confirm của trình duyệt.
+    const [confirmingCancelOrderId, setConfirmingCancelOrderId] = React.useState<string | null>(null);
     const trangThaiHienTai: OrderStatus = lastOrder ? lastOrder.status : 'PAID';
     const maDon = lastOrder ? (lastOrder.orderCode ?? lastOrder.id) : '—';
     const diemCongThem = Math.floor((lastOrder?.total || 0) / 10000);
@@ -96,16 +98,39 @@ export const DatHangThanhCong: React.FC<DatHangThanhCongProps> = ({
                     {onTransitionOrder &&
                         (trangThaiHienTai === 'PAID' ||
                             (trangThaiHienTai === 'PENDING' && !lastOrder?.pendingZalopay && !lastOrder?.paidWithZalopay)) && (
-                            <div className="pt-2 border-t border-[#E2D9C0] flex justify-end">
+                            <div className="pt-2 border-t border-[#E2D9C0] flex justify-end gap-2 flex-wrap">
                                 <button
                                     type="button"
                                     disabled={Boolean(cancellingOrderId)}
-                                    onClick={() => lastOrder && onTransitionOrder(lastOrder.id, 'CANCELLED')}
-                                    className="disabled:opacity-50 disabled:cursor-wait px-3.5 py-1.5 border border-[#D5CCB4] bg-[#EDE6D1] rounded-lg text-xs font-semibold text-[#124E35] cursor-pointer hover:bg-[#124E35] hover:text-[#F5F0E1] transition-colors"
+                                    aria-pressed={confirmingCancelOrderId === lastOrder?.id}
+                                    onClick={() => {
+                                        if (!lastOrder) return;
+                                        if (confirmingCancelOrderId === lastOrder.id) {
+                                            setConfirmingCancelOrderId(null);
+                                            onTransitionOrder(lastOrder.id, 'CANCELLED');
+                                        } else {
+                                            setConfirmingCancelOrderId(lastOrder.id);
+                                        }
+                                    }}
+                                    className={`disabled:opacity-50 disabled:cursor-wait px-3.5 py-1.5 border rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+                                        confirmingCancelOrderId === lastOrder?.id
+                                            ? 'border-red-700 bg-red-700 text-white hover:bg-red-800'
+                                            : 'border-[#D5CCB4] bg-[#EDE6D1] text-[#124E35] hover:bg-[#124E35] hover:text-[#F5F0E1]'
+                                    }`}
                                 >
                                     {cancellingOrderId === lastOrder?.id ? 'Đang xử lý...' :
-                                        trangThaiHienTai === 'PAID' ? 'Hủy đơn / Hoàn mô phỏng' : 'Hủy đơn'}
+                                        confirmingCancelOrderId === lastOrder?.id ? 'Xác nhận hủy' :
+                                            trangThaiHienTai === 'PAID' ? 'Hủy đơn / Hoàn mô phỏng' : 'Hủy đơn'}
                                 </button>
+                                {confirmingCancelOrderId === lastOrder?.id && !cancellingOrderId && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setConfirmingCancelOrderId(null)}
+                                        className="px-3.5 py-1.5 border border-[#D5CCB4] rounded-lg text-xs font-semibold text-[#124E35] bg-white hover:bg-[#EDE6D1] cursor-pointer transition-colors"
+                                    >
+                                        Không hủy
+                                    </button>
+                                )}
                             </div>
                         )}
                 </div>

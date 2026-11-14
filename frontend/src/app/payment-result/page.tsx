@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { api } from '../../api';
 import { useGioHang } from '../../store/useGioHang';
 
-type State = 'checking' | 'paid' | 'failed' | 'unknown';
+type State = 'checking' | 'paid' | 'failed' | 'cancelled' | 'unknown';
 
 export default function ZalopayResultPage() {
   const [state, setState] = useState<State>('checking');
@@ -39,6 +39,11 @@ export default function ZalopayResultPage() {
           sessionStorage.removeItem('brewlite_create_key');
           sessionStorage.removeItem('brewlite_zalopay_order');
           clearCart();
+          return;
+        }
+        if (result.orderStatus === 'CANCELLED' && result.simulatedCancellation) {
+          setState('cancelled');
+          setMessage('Đơn đã hủy mô phỏng trong BrewLite. Không có giao dịch hoàn tiền về ví ZaloPay.');
           return;
         }
         if (result.payment?.status === 'PENDING' && result.payment.method === 'ZALOPAY') {

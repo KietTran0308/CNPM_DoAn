@@ -133,6 +133,8 @@ export const LichSuDon: React.FC<LichSuDonProps> = ({
                                                         onClearNotice,
                                                     }) => {
     const [retryMethodByOrder, setRetryMethodByOrder] = useState<Record<string, 'ZALOPAY' | 'WALLET' | 'CARD'>>({});
+    // Bấm lần 1 để yêu cầu xác nhận; lần 2 mới thực hiện hủy qua API.
+    const [confirmingCancelOrderId, setConfirmingCancelOrderId] = useState<string | null>(null);
     const [now, setNow] = useState(() => Date.now());
     useEffect(() => {
         const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -220,12 +222,8 @@ export const LichSuDon: React.FC<LichSuDonProps> = ({
                                 ? 'Hết hạn – chờ đối soát'
                                 : expiredBeforePayment ? 'Hết hạn – chờ xác nhận hủy'
                                 : layTenTrangThai(status);
-                            // Không cung cấp nút thanh toán/hủy cho đơn quá hạn.
-                            // Chỉ Backend mới được chuyển trạng thái CANCELLED khi đã an toàn.
                             const choPhepKhachThaoTac = !expiredBeforePayment &&
                                 (status === 'PENDING' || status === 'PAYMENT_FAILED' || status === 'PAID');
-                            // PDF: PAID -> CANCELLED được phép trước khi barista bắt đầu pha chế.
-                            // Giao dịch gateway PENDING vẫn bị Backend chặn để bảo vệ tiền khách.
                             const coTheHuy = status === 'PAID' ||
                                 ((status === 'PENDING' || status === 'PAYMENT_FAILED') &&
                                     !order.pendingZalopay && !order.paidWithZalopay);
@@ -320,24 +318,43 @@ export const LichSuDon: React.FC<LichSuDonProps> = ({
                       {formatPrice(order.total)}
                     </span>
                                     </div>
-
-                                    {status === 'CANCELLED' && Number(order.simulatedRefundAmount || 0) > 0 && (
-                                        <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                                            Đã ghi nhận hoàn <strong>{formatPrice(order.simulatedRefundAmount || 0)}</strong> mô phỏng trong BrewLite.
-                                            Đây không phải giao dịch hoàn tiền thật qua ZaloPay.
-                                        </div>
-                                    )}
                                     {choPhepKhachThaoTac && (
                                         <div className="pt-2.5 border-t border-[#E2D9C0] flex flex-wrap gap-2 justify-end">
-                                            {coTheHuy ? <button
-                                                type="button"
-                                                disabled={Boolean(cancellingOrderId)}
-                                                onClick={() => onTransition(order.id, 'CANCELLED')}
-                                                className="disabled:opacity-50 disabled:cursor-wait px-3.5 py-1.5 border border-[#D5CCB4] bg-[#EDE6D1] rounded-lg text-xs font-semibold text-[#124E35] cursor-pointer hover:bg-[#124E35] hover:text-[#F5F0E1] transition-colors"
-                                            >
-                                                {cancellingOrderId === order.id ? 'Đang xử lý...' :
-                                                    status === 'PAID' ? 'Hủy đơn / Hoàn mô phỏng' : 'Hủy đơn'}
-                                            </button> : <span className="text-xs text-amber-700 py-1.5">
+                                            {coTheHuy ? (
+                                                <>
+                                                    <button
+                                                        type="button"
+                                                        disabled={Boolean(cancellingOrderId)}
+                                                        aria-pressed={confirmingCancelOrderId === order.id}
+                                                        onClick={() => {
+                                                            if (confirmingCancelOrderId === order.id) {
+                                                                setConfirmingCancelOrderId(null);
+                                                                onTransition(order.id, 'CANCELLED');
+                                                            } else {
+                                                                setConfirmingCancelOrderId(order.id);
+                                                            }
+                                                        }}
+                                                        className={`disabled:opacity-50 disabled:cursor-wait px-3.5 py-1.5 border rounded-lg text-xs font-semibold cursor-pointer transition-colors ${
+                                                            confirmingCancelOrderId === order.id
+                                                                ? 'border-red-700 bg-red-700 text-white hover:bg-red-800'
+                                                                : 'border-[#D5CCB4] bg-[#EDE6D1] text-[#124E35] hover:bg-[#124E35] hover:text-[#F5F0E1]'
+                                                        }`}
+                                                    >
+                                                        {cancellingOrderId === order.id ? 'Đang xử lý...' :
+                                                            confirmingCancelOrderId === order.id ? 'Xác nhận hủy' :
+                                                                status === 'PAID' ? 'Hủy đơn / Hoàn mô phỏng' : 'Hủy đơn'}
+                                                    </button>
+                                                    {confirmingCancelOrderId === order.id && !cancellingOrderId && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setConfirmingCancelOrderId(null)}
+                                                            className="px-3.5 py-1.5 border border-[#D5CCB4] rounded-lg text-xs font-semibold text-[#124E35] bg-white hover:bg-[#EDE6D1] cursor-pointer transition-colors"
+                                                        >
+                                                            Không hủy
+                                                        </button>
+                                                    )}
+                                                </>
+                                            ) : <span className="text-xs text-amber-700 py-1.5">
                                                 Giao dịch đang chờ xác minh: kiểm tra trạng thái thanh toán trước khi hủy.
                                             </span>}
                                             {coTheXemLaiQr && (

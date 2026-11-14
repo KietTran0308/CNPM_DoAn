@@ -26,6 +26,12 @@ test('Giữ trước tài nguyên trong giao dịch chờ thanh toán', () => {
         db = new PrismaClient({ datasources: { db: { url: url! } } });
         await db.$connect();
         process.env.ENABLE_DEMO_PAYMENTS = 'true';
+        // Test DB only: demo payment methods are disabled by default in production.
+        await db.paymentMethod.upsert({
+            where: { code: 'WALLET' },
+            create: { code: 'WALLET', name: 'Ví nội bộ (test)', type: 'INTERNAL', isActive: true },
+            update: { isActive: true },
+        });
         const suffix = randomUUID().replace(/-/g, '').slice(0, 16);
         const user = await db.user.create({ data: {
             email: `reservation-${suffix}@example.invalid`,

@@ -1,8 +1,11 @@
--- BREWLITE - PostgreSQL 16 - SCHEMA + DU LIEU MAU DAY DU (13/11/2026)
--- Chi chay tren DATABASE MOI/TRONG. Khong chay lai tren Render da co don/giao dich.
--- Toan bo bang/constraint giu tru tai nguyen duoc khai bao truc tiep, khong can
--- chay script ALTER TABLE/UPDATE rieng. File tao database structure, KHONG tao database ten cu the.
+-- BrewLite PostgreSQL 16 - NEW/EMPTY DATABASE ONLY - atomic schema + catalog + demo fixtures.
+-- For Prisma-based projects, prefer migrations and separate seed files.
 BEGIN;
+-- BREWLITE - PostgreSQL 16 - INITIAL MIGRATION (NEW DATABASES ONLY)
+-- 19 tables: 17 legacy business tables + payment_methods + payment_gateway_transactions.
+-- Shared payments are provider-agnostic. ZaloPay QR/transaction data live in the gateway table.
+-- No VNPay enum/columns. Demo records are in prisma/seed.sql.
+-- Do not run this initialization on existing Render databases.
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 -- Gia tri thoi gian trong du lieu mau duoc hieu theo UTC (cot da la timestamptz).
@@ -29,13 +32,6 @@ CREATE TYPE public.order_status AS ENUM (
     'READY',
     'COMPLETED',
     'CANCELLED'
-);
-
-CREATE TYPE public.payment_method AS ENUM (
-    'WALLET',
-    'CARD',
-    'VNPAY',
-    'ZALOPAY'
 );
 
 CREATE TYPE public.payment_status AS ENUM (
@@ -166,39 +162,38 @@ ALTER TABLE public.orders ALTER COLUMN order_code ADD GENERATED ALWAYS AS IDENTI
     CACHE 1
 );
 
+-- A payment method is a stable business catalog entry, not a transaction.
+CREATE TABLE public.payment_methods (
+    code varchar(20) PRIMARY KEY,
+    name varchar(100) NOT NULL,
+    type varchar(20) NOT NULL,
+    is_active boolean NOT NULL DEFAULT false,
+    created_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT chk_payment_methods_code CHECK (length(btrim(code)) > 0 AND code = upper(code)),
+    CONSTRAINT chk_payment_methods_name CHECK (length(btrim(name)) > 0),
+    CONSTRAINT chk_payment_methods_type CHECK (type IN ('GATEWAY','INTERNAL'))
+);
+
+-- Common payment attempt details only; no provider-specific QR/transaction columns.
 CREATE TABLE public.payments (
-                                 id uuid DEFAULT gen_random_uuid() NOT NULL,
-                                 order_id uuid NOT NULL,
-                                 idempotency_key character varying(128) NOT NULL,
-                                 amount numeric(12,2) NOT NULL,
-                                 method public.payment_method NOT NULL,
-                                 status public.payment_status NOT NULL,
-                                 provider_ref character varying(255),
-                                 vnp_transaction_no varchar(255),
-                                 vnp_response_code varchar(10),
-                                 bank_code varchar(50),
-                                 paid_at timestamptz,
-                                 vnp_create_date varchar(14),
-                                 vnp_ip_addr varchar(45),
-                                 zp_trans_id varchar(50),
-                                 zp_order_url varchar(2048),
-                                 zp_qr_code varchar(2048),
-    -- Hoan tien mo phong: 0 neu chua hoan, so tien da hoan neu co.
-                                 refunded_amount numeric(12,2) NOT NULL DEFAULT 0,
-                                 refunded_at timestamptz,
-                                 created_at timestamptz DEFAULT now() NOT NULL,
-                                 CONSTRAINT chk_payments_amount CHECK ((amount >= (0)::numeric)),
-                                 CONSTRAINT chk_payments_idempotency CHECK (((length(btrim((idempotency_key)::text)) >= 8) AND (length(btrim((idempotency_key)::text)) <= 128))),
-    -- [B] 0 <= refunded_amount <= amount; refunded_at co gia tri khi va chi khi da hoan tien.
-                                 CONSTRAINT chk_payments_refund CHECK (
-                                     refunded_amount >= 0 AND refunded_amount <= amount
-                                         AND ((refunded_amount = 0 AND refunded_at IS NULL)
-                                         OR (refunded_amount > 0 AND refunded_at IS NOT NULL))
-                                     ),
-    -- Chi giao dich thanh toan thanh cong moi co the duoc hoan tien.
-                                 CONSTRAINT chk_payments_refund_only_success CHECK (
-                                     refunded_amount = 0 OR status = 'SUCCESS'
-                                     )
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    order_id uuid NOT NULL,
+    idempotency_key varchar(128) NOT NULL,
+    amount numeric(12,2) NOT NULL,
+    method_code varchar(20) NOT NULL,
+    status public.payment_status NOT NULL,
+    paid_at timestamptz,
+    refunded_amount numeric(12,2) NOT NULL DEFAULT 0,
+    refunded_at timestamptz,
+    created_at timestamptz DEFAULT now() NOT NULL,
+    CONSTRAINT chk_payments_amount CHECK (amount >= 0),
+    CONSTRAINT chk_payments_idempotency CHECK (length(btrim(idempotency_key)) BETWEEN 8 AND 128),
+    CONSTRAINT chk_payments_refund CHECK (
+        refunded_amount >= 0 AND refunded_amount <= amount AND
+        ((refunded_amount = 0 AND refunded_at IS NULL) OR
+         (refunded_amount > 0 AND refunded_at IS NOT NULL))
+    ),
+    CONSTRAINT chk_payments_refund_only_success CHECK (refunded_amount = 0 OR status = 'SUCCESS')
 );
 
 -- Bang GIA BAN duy nhat theo tung san pham va size (khong dung products.price).
@@ -303,6 +298,25 @@ ALTER TABLE ONLY public.payments
 ALTER TABLE ONLY public.payments
     ADD CONSTRAINT payments_pkey PRIMARY KEY (id);
 
+-- Optional 1:1 details for gateway payments (e.g. ZaloPay).
+-- gateway_order_id: ZaloPay app_trans_id, generated by the Backend.
+-- gateway_transaction_id: ZaloPay zp_trans_id returned by provider.
+-- provider_ref: other/legacy provider reference, not a method identifier.
+CREATE TABLE public.payment_gateway_transactions (
+    payment_id uuid PRIMARY KEY,
+    gateway_order_id varchar(128),
+    gateway_transaction_id varchar(255),
+    provider_ref varchar(255),
+    checkout_url varchar(2048),
+    qr_content text,
+    response_code varchar(50),
+    created_at timestamptz NOT NULL DEFAULT now(),
+    updated_at timestamptz NOT NULL DEFAULT now(),
+    CONSTRAINT fk_payment_gateway_payment
+        FOREIGN KEY (payment_id) REFERENCES public.payments(id) ON DELETE CASCADE
+);
+
+
 ALTER TABLE ONLY public.product_size_prices
     ADD CONSTRAINT product_size_prices_pkey PRIMARY KEY (product_id, size);
 
@@ -351,6 +365,7 @@ CREATE INDEX idx_status_history_order ON public.order_status_history USING btree
 CREATE INDEX idx_status_history_changed_by ON public.order_status_history USING btree (changed_by);
 
 CREATE INDEX idx_user_vouchers_user ON public.user_vouchers USING btree (user_id);
+CREATE INDEX idx_user_vouchers_reserved_order ON public.user_vouchers (reserved_order_id);
 -- 1 don hang chi co the su dung toi da 1 voucher, khop orders.coupon_id.
 CREATE UNIQUE INDEX ux_user_vouchers_used_order ON public.user_vouchers (used_order_id)
     WHERE used_order_id IS NOT NULL;
@@ -363,13 +378,15 @@ CREATE UNIQUE INDEX ux_loyalty_order_transaction_type ON public.loyalty_transact
 CREATE UNIQUE INDEX ux_loyalty_reversal_origin ON public.loyalty_transactions (reverses_transaction_id)
     WHERE reverses_transaction_id IS NOT NULL;
 
-CREATE UNIQUE INDEX ux_payments_provider_ref ON public.payments(provider_ref);
-CREATE UNIQUE INDEX ux_payments_one_pending_vnpay_per_order ON public.payments(order_id)
-    WHERE method = 'VNPAY' AND status = 'PENDING';
-CREATE UNIQUE INDEX ux_payments_one_pending_zalopay_per_order ON public.payments(order_id)
-    WHERE method = 'ZALOPAY' AND status = 'PENDING';
-CREATE UNIQUE INDEX ux_payments_zp_trans_id ON public.payments(zp_trans_id);
-CREATE UNIQUE INDEX ux_payments_one_success_per_order ON public.payments USING btree (order_id) WHERE (status = 'SUCCESS'::public.payment_status);
+-- One PENDING attempt per order per method. Different methods can still be pending
+-- concurrently; Backend MUST invalidate old attempts before switching methods.
+CREATE UNIQUE INDEX ux_payments_one_pending_per_method_order
+    ON public.payments(order_id, method_code) WHERE status = 'PENDING';
+CREATE UNIQUE INDEX ux_payments_one_success_per_order
+    ON public.payments(order_id) WHERE status = 'SUCCESS';
+CREATE UNIQUE INDEX ux_payment_gateway_order_id ON public.payment_gateway_transactions(gateway_order_id);
+CREATE UNIQUE INDEX ux_payment_gateway_transaction_id ON public.payment_gateway_transactions(gateway_transaction_id);
+CREATE UNIQUE INDEX ux_payment_gateway_provider_ref ON public.payment_gateway_transactions(provider_ref);
 
 CREATE UNIQUE INDEX ux_products_code ON public.products USING btree (code);
 CREATE UNIQUE INDEX ux_products_image_key ON public.products USING btree (image_key);
@@ -393,6 +410,9 @@ ALTER TABLE ONLY public.user_vouchers
 
 ALTER TABLE ONLY public.user_vouchers
     ADD CONSTRAINT fk_uv_used_order FOREIGN KEY (used_order_id) REFERENCES public.orders(id);
+
+ALTER TABLE ONLY public.user_vouchers
+    ADD CONSTRAINT fk_uv_reserved_order FOREIGN KEY (reserved_order_id) REFERENCES public.orders(id);
 
 ALTER TABLE ONLY public.loyalty_transactions
     ADD CONSTRAINT fk_loyalty_reverses FOREIGN KEY (reverses_transaction_id)
@@ -429,6 +449,9 @@ ALTER TABLE ONLY public.orders
 
 ALTER TABLE ONLY public.payments
     ADD CONSTRAINT fk_payments_order FOREIGN KEY (order_id) REFERENCES public.orders(id);
+ALTER TABLE ONLY public.payments
+    ADD CONSTRAINT fk_payments_method FOREIGN KEY (method_code)
+    REFERENCES public.payment_methods(code) ON DELETE RESTRICT ON UPDATE RESTRICT;
 
 ALTER TABLE ONLY public.product_size_prices
     ADD CONSTRAINT fk_psp_product FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE CASCADE;
@@ -533,6 +556,20 @@ CREATE UNIQUE INDEX ux_one_consumption_per_ingredient_order
 CREATE UNIQUE INDEX ux_one_opening_per_ingredient
     ON public.ingredient_movements(ingredient_id) WHERE movement_type = 'OPENING';
 
+
+-- Essential catalog data, safe on new/old databases. This is NOT demo-only data.
+-- Disabled placeholders are NOT usable payment methods until the Backend implements them.
+INSERT INTO public.payment_methods (code, name, type, is_active) VALUES
+    ('ZALOPAY', 'ZaloPay', 'GATEWAY', true),
+    ('WALLET', 'Ví nội bộ', 'INTERNAL', false),
+    ('CARD', 'Thẻ ngân hàng', 'GATEWAY', false)
+ON CONFLICT (code) DO NOTHING;
+
+-- BREWLITE - POSTGRESQL 16 - OPTIONAL DEMO SEED ONLY
+-- Runs AFTER seed_payment_methods.sql. Idempotent on conflicts: does not update existing records.
+-- Do NOT run on production unless demo accounts, coupon fixtures and opening inventory are desired.
+SET LOCAL TIME ZONE 'UTC';
+
 INSERT INTO public.coupons (id, code, discount_type, discount_value, min_order_value, max_uses, used_count, is_active, valid_from, valid_to) VALUES
                                                                                                                                                  ('adbbacc5-1334-51f8-8f49-0804c79ef130', 'WELCOME10', 'PERCENT', '10.00', '30000.00', '100', '0', 't', '2026-07-27 17:57:02.446613', '2027-12-31 16:59:59'),
                                                                                                                                                  ('653cb812-382c-5f3f-ab46-644a131aca3b', 'FREESHIP5', 'FIXED', '5000.00', '35000.00', '120', '0', 't', '2026-07-27 17:57:02.446613', '2027-12-31 16:59:59'),
@@ -541,7 +578,9 @@ INSERT INTO public.coupons (id, code, discount_type, discount_value, min_order_v
                                                                                                                                                  ('05e690cc-5779-51ea-8363-0e9a810ea085', 'LOYA5K', 'FIXED', '5000.00', '45000.00', '100', '0', 't', '2026-07-27 17:57:02.446613', '2027-12-31 16:59:59'),
                                                                                                                                                  ('352c856d-4fdf-501c-8770-41ab24a770a6', 'EXPIRED10', 'PERCENT', '10.00', '30000.00', '15', '0', 't', '2026-07-27 17:57:02.446613', '2026-10-20 17:57:02.446613'),
                                                                                                                                                  ('9121ba0a-9f7f-5381-a190-048874304192', 'INACTIVE5', 'FIXED', '5000.00', '40000.00', '20', '0', 'f', '2026-08-26 17:57:02.446613', '2027-12-31 16:59:59'),
-                                                                                                                                                 ('804ee787-75a6-539c-9d39-83bb8853f413', 'BREWLITE15', 'PERCENT', '15.00', '60000.00', '80', '0', 't', '2026-07-27 17:57:02.446613', '2027-12-31 16:59:59');
+                                                                                                                                                 ('804ee787-75a6-539c-9d39-83bb8853f413', 'BREWLITE15', 'PERCENT', '15.00', '60000.00', '80', '0', 't', '2026-07-27 17:57:02.446613', '2027-12-31 16:59:59')
+ON CONFLICT DO NOTHING;
+
 
 INSERT INTO public.toppings (id, code, name, price, is_active) VALUES
                                                                    ('3075f104-4b54-59d0-a5af-0d8fa3ab2828', 'TP001', 'Trân châu đen', '5000.00', 't'),
@@ -553,7 +592,9 @@ INSERT INTO public.toppings (id, code, name, price, is_active) VALUES
                                                                    ('3655baaf-57e8-57d8-b0df-986345d8002c', 'TP007', 'Thạch đào', '6000.00', 't'),
                                                                    ('46ccd2db-66ca-5514-8ab3-7a0c76e4478e', 'TP008', 'Thạch vải', '6000.00', 't'),
                                                                    ('674c8ede-3830-5c10-963e-4d5fbe129ef4', 'TP009', 'Shot espresso', '10000.00', 't'),
-                                                                   ('c5f1343d-f22c-5819-bd08-62a013bfa85e', 'TP010', 'Pudding trứng', '8000.00', 't');
+                                                                   ('c5f1343d-f22c-5819-bd08-62a013bfa85e', 'TP010', 'Pudding trứng', '8000.00', 't')
+ON CONFLICT DO NOTHING;
+
 
 INSERT INTO public.users (id, email, password_hash, full_name, phone, role, loyalty_points, created_at, avatar_url, favorite_branch) VALUES
                                                                                                                                          ('5f15f651-55d0-54af-b402-204a5cdb438e', 'customer04@example.com', '$2b$12$.fMfd4/QFSJJelZpB2vyy.cfte0yXlU8PXx4zy./KMLDYztKSGtfe', 'Phạm Gia Huy', '0900000004', 'CUSTOMER', '0', '2026-10-13 15:57:02.446613', NULL, NULL),
@@ -567,7 +608,9 @@ INSERT INTO public.users (id, email, password_hash, full_name, phone, role, loya
                                                                                                                                          ('305ebe46-9a84-5923-a736-df0a01191b58', 'admin01@example.com', '$2b$12$.fMfd4/QFSJJelZpB2vyy.cfte0yXlU8PXx4zy./KMLDYztKSGtfe', 'Quản trị BrewLite', '0900000012', 'ADMIN', '0', '2026-10-14 11:57:02.446613', NULL, NULL),
                                                                                                                                          ('0abd345f-7157-5376-bdf7-d23459d5c505', 'customer01@example.com', '$2b$12$.fMfd4/QFSJJelZpB2vyy.cfte0yXlU8PXx4zy./KMLDYztKSGtfe', 'Nguyễn Minh Anh', '0900000001', 'CUSTOMER', '0', '2026-10-08 17:57:02.446613', NULL, NULL),
                                                                                                                                          ('fd59e87d-6638-5681-9acd-cf19dd4fe755', 'customer03@example.com', '$2b$12$.fMfd4/QFSJJelZpB2vyy.cfte0yXlU8PXx4zy./KMLDYztKSGtfe', 'Lê Thảo Vy', '0900000003', 'CUSTOMER', '0', '2026-10-11 17:57:02.446613', NULL, NULL),
-                                                                                                                                         ('89094c8e-81d2-582b-adcc-b81a331c6684', 'customer02@example.com', '$2b$12$.fMfd4/QFSJJelZpB2vyy.cfte0yXlU8PXx4zy./KMLDYztKSGtfe', 'Trần Quốc Bảo', '0900000002', 'CUSTOMER', '0', '2026-10-10 17:57:02.446613', NULL, NULL);
+                                                                                                                                         ('89094c8e-81d2-582b-adcc-b81a331c6684', 'customer02@example.com', '$2b$12$.fMfd4/QFSJJelZpB2vyy.cfte0yXlU8PXx4zy./KMLDYztKSGtfe', 'Trần Quốc Bảo', '0900000002', 'CUSTOMER', '0', '2026-10-10 17:57:02.446613', NULL, NULL)
+ON CONFLICT DO NOTHING;
+
 
 -- image_key la ma anh local (duoc frontend map sang asset), KHONG PHAI URL.
 -- image_url dang NULL; neu UI su dung URL thay vi image_key thi can cap nhat truoc demo.
@@ -575,7 +618,7 @@ INSERT INTO public.products (id, code, name, category, description, image_url, i
                                                                                                                   ('c2109f91-894f-5836-872b-fc4c0f04ca5d', 'BL001', 'Cà phê sữa', 'Cà phê', 'Cà phê Robusta đậm đà pha sữa đặc thơm béo truyền thống', NULL, 'caPheSua', 0, TRUE),
                                                                                                                   ('80976789-a56b-5b36-88ba-04cd171910d6', 'BL002', 'Americano', 'Cà phê', 'Cà phê đen nguyên chất pha loãng với nước nóng thanh tao', NULL, 'americano', 0, TRUE),
                                                                                                                   ('0f5dda15-68ab-5ca9-aa9a-eb7dc73894d0', 'BL003', 'Cappuccino', 'Cà phê', 'Espresso đậm vị kết hợp sữa nóng và lớp bọt sữa bồng bềnh', NULL, 'cappuccino', 0, TRUE),
-                                                                                                                  ('5f6a5f28-990d-585f-890a-4182e8664384', 'BL004', 'Trà đào', 'Trà', 'Trà thanh mát kết hợp đào miếng tươi giòn ngọt lịm', NULL, 'traDao', 0, TRUE),
+                                                                                                ('67a29cc6-e399-5f12-a564-faee3a7aa363', 'BL015', 'Cà phê đen', 'Cà phê', 'Cà phê phin nguyên chất đậm đà, thơm nồng, dùng cùng đá mát lạnh', NULL, 'caPheDen', 0, TRUE),
                                                                                                                   ('4c1c6d0a-0b99-5c97-b5ba-ac3a55b06479', 'BL005', 'Cà Phê Muối Huế', 'Cà phê', 'Cà phê phin đậm đà kết hợp lớp kem muối mặn ngọt béo ngậy chuẩn vị cố đô', NULL, 'caPheMuoi', 0, TRUE),
                                                                                                                   ('4f132288-30ec-529d-b40a-80d49fbdc751', 'BL006', 'Cà Phê Trứng Hà Nội', 'Cà phê', 'Lớp kem trứng gà đánh bông mịn màng, thơm lừng hòa quyện cùng cà phê nóng', NULL, 'caPheTrung', 0, TRUE),
                                                                                                                   ('f05fbd26-e12a-5870-83fe-01820d68bdba', 'BL007', 'Bạc Xỉu Đá Sài Gòn', 'Cà phê', 'Sữa đặc pha sữa tươi béo ngậy tạo tầng đẹp mắt cùng cà phê phin thơm nhẹ', NULL, 'bacXiu', 0, TRUE),
@@ -585,14 +628,16 @@ INSERT INTO public.products (id, code, name, category, description, image_url, i
                                                                                                                   ('60a3c525-a72d-5dea-bb8e-436d7ed1f7f0', 'BL011', 'Trà Đào Cam Sả', 'Trà', 'Hồng trà ủ lạnh thơm hương sả tươi, cam vàng mọng nước và đào miếng giòn ngọt', NULL, 'traDaoCamSa', 0, TRUE),
                                                                                                                   ('25204519-c2ee-5fb9-a3b0-cd1e4f20a4c8', 'BL012', 'Trà Vải Hoa Hồng', 'Trà', 'Trà lài thanh tao quyện vị ngọt thanh của trái vải ngâm và hương hoa hồng dịu nhẹ', NULL, 'traVaiHoaHong', 0, TRUE),
                                                                                                                   ('f6404914-0dbb-5b96-92f7-02e89db7cea7', 'BL013', 'Trà Mãng Cầu Tươi', 'Trà', 'Mãng cầu xiêm tươi dầm chua ngọt sảng khoái trên nền trà xanh lài đậm vị', NULL, 'traMangCau', 0, TRUE),
-                                                                                                                  ('fc7d19ab-08ee-532c-a719-e7d34417bb98', 'BL014', 'Trà Ô Long Nhãn Nhục Hạt Chia', 'Trà', 'Vị ngọt thanh cổ truyền từ nhãn nhục sấy khô, hạt chia bổ dưỡng cùng trà Ô long', NULL, 'traOLongNhanNhuc', 0, TRUE);
+                                                                                                                  ('fc7d19ab-08ee-532c-a719-e7d34417bb98', 'BL014', 'Trà Ô Long Nhãn Nhục Hạt Chia', 'Trà', 'Vị ngọt thanh cổ truyền từ nhãn nhục sấy khô, hạt chia bổ dưỡng cùng trà Ô long', NULL, 'traOLongNhanNhuc', 0, TRUE)
+ON CONFLICT DO NOTHING;
+
 
 WITH base_price(product_code, price) AS (
     VALUES
         ('BL001', 35000.00),
         ('BL002', 40000.00),
         ('BL003', 45000.00),
-        ('BL004', 39000.00),
+        ('BL015', 30000.00),
         ('BL005', 39000.00),
         ('BL006', 45000.00),
         ('BL007', 35000.00),
@@ -611,7 +656,10 @@ SELECT p.id, s.size,
                    WHEN 'L' THEN bp.price + 5000 END
 FROM base_price bp
          JOIN public.products p ON p.code = bp.product_code
-         CROSS JOIN (VALUES ('S'::public.product_size), ('M'::public.product_size), ('L'::public.product_size)) AS s(size);
+         CROSS JOIN (VALUES ('S'::public.product_size), ('M'::public.product_size), ('L'::public.product_size)) AS s(size)
+WHERE TRUE
+ON CONFLICT DO NOTHING;
+
 
 CREATE TEMP TABLE seed_initial_ingredients (
     code varchar(30) PRIMARY KEY,
@@ -620,6 +668,7 @@ CREATE TEMP TABLE seed_initial_ingredients (
     opening_qty numeric(14,3) NOT NULL,
     min_stock_quantity numeric(14,3) NOT NULL
 ) ON COMMIT DROP;
+
 
 INSERT INTO seed_initial_ingredients(code,name,unit,opening_qty,min_stock_quantity) VALUES
                                                                                         ('CF_BOT', 'Cà phê bột', 'g', 16000.000, 2000.000),
@@ -656,14 +705,24 @@ INSERT INTO seed_initial_ingredients(code,name,unit,opening_qty,min_stock_quanti
                                                                                         ('NHAN_NHUC', 'Nhãn nhục sấy', 'g', 15000.000, 1500.000),
                                                                                         ('HAT_CHIA', 'Hạt chia', 'g', 10000.000, 1000.000);
 
-INSERT INTO public.ingredients(code,name,unit,stock_quantity,min_stock_quantity,version)
-SELECT code,name,unit,opening_qty,min_stock_quantity,1 FROM seed_initial_ingredients;
 
+-- Only record an OPENING movement for a newly inserted ingredient.
+-- Re-seeding an existing stock item must NOT create another opening movement.
+WITH just_inserted AS (
+    INSERT INTO public.ingredients(code,name,unit,stock_quantity,min_stock_quantity,version)
+    SELECT code,name,unit,opening_qty,min_stock_quantity,1
+    FROM seed_initial_ingredients
+    WHERE TRUE
+    ON CONFLICT (code) DO NOTHING
+    RETURNING id, code
+)
 INSERT INTO public.ingredient_movements
 (ingredient_id, movement_type, expected_version, quantity_change, stock_before, stock_after, note)
 SELECT i.id, 'OPENING', 0, s.opening_qty, 0, s.opening_qty, 'Ton dau ky (du lieu mau)'
-FROM public.ingredients i JOIN seed_initial_ingredients s ON s.code=i.code
-WHERE s.opening_qty>0;
+FROM just_inserted i JOIN seed_initial_ingredients s ON s.code=i.code
+WHERE s.opening_qty > 0
+ON CONFLICT DO NOTHING;
+
 
 -- Dinh luong tham khao cho size M; S 80%, L 125% (thay doi theo cong thuc nhom).
 WITH recipe_base(product_code, ingredient_code, quantity_m) AS (
@@ -675,12 +734,9 @@ WITH recipe_base(product_code, ingredient_code, quantity_m) AS (
         ('BL002', 'NUOC_LOC', 160.000::numeric),
         ('BL003', 'CF_BOT', 18.000::numeric),
         ('BL003', 'SUA_TUOI', 140.000::numeric),
-        ('BL004', 'TRA_LA', 10.000::numeric),
-        ('BL004', 'SIRO_DAO', 25.000::numeric),
-        ('BL004', 'DAO_MIEN', 60.000::numeric),
-        ('BL004', 'DUONG', 10.000::numeric),
-        ('BL004', 'DA_VIEN', 140.000::numeric),
-        ('BL004', 'NUOC_LOC', 140.000::numeric),
+        ('BL015', 'CF_BOT', 20.000::numeric),
+        ('BL015', 'NUOC_LOC', 150.000::numeric),
+        ('BL015', 'DA_VIEN', 130.000::numeric),
         ('BL005', 'CF_BOT', 20.000::numeric),
         ('BL005', 'SUA_DAC', 20.000::numeric),
         ('BL005', 'KEM_MUOI', 40.000::numeric),
@@ -741,7 +797,10 @@ FROM recipe_base rb
          JOIN public.products p ON p.code = rb.product_code
          JOIN public.ingredients i ON i.code = rb.ingredient_code
          CROSS JOIN size_ratio sr
-         JOIN public.product_size_prices psp ON psp.product_id = p.id AND psp.size = sr.size;
+         JOIN public.product_size_prices psp ON psp.product_id = p.id AND psp.size = sr.size
+WHERE TRUE
+ON CONFLICT DO NOTHING;
+
 
 -- Topping quantity per ONE serving (nhan voi order_items.quantity va servings cua topping).
 WITH topping_recipe(topping_code, ingredient_code, quantity) AS (
@@ -762,6 +821,10 @@ INSERT INTO public.topping_ingredients (topping_id, ingredient_id, quantity)
 SELECT t.id, i.id, r.quantity
 FROM topping_recipe r
          JOIN public.toppings t ON t.code = r.topping_code
-         JOIN public.ingredients i ON i.code = r.ingredient_code;
+         JOIN public.ingredients i ON i.code = r.ingredient_code
+WHERE TRUE
+ON CONFLICT DO NOTHING;
+
+
 
 COMMIT;

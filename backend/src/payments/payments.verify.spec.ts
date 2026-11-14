@@ -1,5 +1,5 @@
 import { NotFoundException } from '@nestjs/common';
-import { OrderStatus, PaymentMethod, PaymentStatus } from '@prisma/client';
+import { OrderStatus, PaymentStatus } from '@prisma/client';
 import { PaymentsService } from './payments.service';
 
 describe('Customer self verification of ZaloPay', () => {
@@ -17,7 +17,7 @@ describe('Customer self verification of ZaloPay', () => {
     it('throttles repeated QueryDR checks on pending payment and preserves ownership filter', async () => {
         const findFirst = jest.fn(async () => ({ id: orderId, userId, status: OrderStatus.PENDING }));
         const prisma = { order: { findFirst }, payment: { findFirst: jest.fn(async () => ({
-            id: 'pay-1', status: PaymentStatus.PENDING, method: PaymentMethod.ZALOPAY,
+            id: 'pay-1', status: PaymentStatus.PENDING, methodCode: 'ZALOPAY',
         })) } };
         const svc = new PaymentsService(prisma as any, {} as any, {} as any);
         const recheck = jest.spyOn(svc, 'recheckZalopay').mockResolvedValue({ message: 'Đang xử lý' } as any);
@@ -31,7 +31,7 @@ describe('Customer self verification of ZaloPay', () => {
     it('does not query gateway again after payment is already successful', async () => {
         const prisma = { order: { findFirst: jest.fn(async () => ({ id: orderId, userId,
             status: OrderStatus.PAID })) }, payment: { findFirst: jest.fn(async () => ({
-            status: PaymentStatus.SUCCESS, method: PaymentMethod.ZALOPAY,
+            status: PaymentStatus.SUCCESS, methodCode: 'ZALOPAY',
         })) } };
         const svc = new PaymentsService(prisma as any, {} as any, {} as any);
         const recheck = jest.spyOn(svc, 'recheckZalopay');

@@ -14,7 +14,7 @@ export const ANH_MON_NUOC = {
     caPheSua: '/images/caphesua.jpg',
     americano: '/images/americano.jpg',
     cappuccino: '/images/capuchino.jpg',
-    traDao: '/images/tradaocamsa.jpg',
+    caPheDen: '/images/capheden.jpg',
     caPheMuoi: '/images/caphemuoi.jpg',
     caPheTrung: '/images/caphetrung.jpg',
     bacXiu: '/images/bacxiu.jpg',
@@ -245,7 +245,6 @@ export interface Payment {
     amount: number;
     method: string;
     status?: string;
-    providerRef?: string;
     refundedAmount?: number;
     refundedAt?: string | null;
     simulateFailure?: boolean;
@@ -413,19 +412,19 @@ export const DEFAULT_PRODUCTS: Product[] = [
         sizePrices: { S: 40000, M: 45000, L: 50000 },
     },
     {
-        id: '5f6a5f28-990d-585f-890a-4182e8664384',
-        uuid: '5f6a5f28-990d-585f-890a-4182e8664384',
-        code: 'BL004',
-        name: 'Trà đào',
-        price: 39000,
-        imageUrl: ANH_MON_NUOC.traDao || ANH_MAC_DINH,
-        imageKey: 'traDao',
+        id: '67a29cc6-e399-5f12-a564-faee3a7aa363',
+        uuid: '67a29cc6-e399-5f12-a564-faee3a7aa363',
+        code: 'BL015',
+        name: 'Cà phê đen',
+        price: 30000,
+        imageUrl: ANH_MON_NUOC.caPheDen || ANH_MAC_DINH,
+        imageKey: 'caPheDen',
         stock: 18,
-        category: 'Trà',
-        description: 'Trà thanh mát kết hợp đào miếng tươi giòn ngọt lịm',
+        category: 'Cà phê',
+        description: 'Cà phê phin nguyên chất đậm đà, thơm nồng, dùng cùng đá mát lạnh',
         isActive: true,
         version: 0,
-        sizePrices: { S: 34000, M: 39000, L: 44000 },
+        sizePrices: { S: 25000, M: 30000, L: 35000 },
     },
     {
         id: '4c1c6d0a-0b99-5c97-b5ba-ac3a55b06479',
@@ -703,10 +702,10 @@ export function mapOrder(raw: any): Order {
     return {
         id,
         paidWithZalopay: Array.isArray(raw.payments) && raw.payments.some(
-            (payment: any) => ['ZALOPAY', 'VNPAY'].includes(payment.method) && payment.status === 'SUCCESS',
+            (payment: any) => (payment.methodCode ?? payment.method) === 'ZALOPAY' && payment.status === 'SUCCESS',
         ),
         pendingZalopay: Array.isArray(raw.payments) && raw.payments.some(
-            (payment: any) => ['ZALOPAY', 'VNPAY'].includes(payment.method) && payment.status === 'PENDING',
+            (payment: any) => (payment.methodCode ?? payment.method) === 'ZALOPAY' && payment.status === 'PENDING',
         ),
         // Sổ hoàn tiền DEMO nội bộ. KHÔNG đồng nghĩa đã nhận tiền từ ZaloPay Refund API.
         simulatedRefundAmount: Array.isArray(raw.payments)
@@ -886,10 +885,11 @@ export interface StockIngredient {
     minStockQuantity: number;
 }
 export interface ReconciliationPayment {
-    method: 'ZALOPAY' | 'VNPAY';
+    methodCode: 'ZALOPAY';
     id: string;
     orderId: string;
-    providerRef: string | null;
+    gatewayTransaction: { providerRef: string | null; gatewayTransactionId: string | null;
+        checkoutUrl: string | null; qrContent: string | null } | null;
     amount: number;
     status: 'PENDING' | 'SUCCESS' | 'FAILED';
     order: { orderCode: number; status: OrderStatus; total: number };
@@ -900,6 +900,8 @@ export interface ZalopayStatusResult {
     orderStatus: OrderStatus;
     expiresAt?: string;
     requiresReconciliation?: boolean;
+    // Đơn đã hủy bằng sổ hoàn mô phỏng BrewLite; không phải hoàn tiền từ ZaloPay.
+    simulatedCancellation?: boolean;
     awaitingGateway?: boolean;
     verification?: {
         outcome: 'SUCCESS' | 'PENDING' | 'NOT_CONFIRMED' | 'CONFIG_ERROR' |
